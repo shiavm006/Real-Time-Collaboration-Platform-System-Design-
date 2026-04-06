@@ -1,0 +1,53 @@
+# --- Backend (Python) ---
+backend/venv/
+backend/**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.cover
+htmlcov/
+
+# Secrets & local config
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Alembic (keep migrations; ignore local DB URLs if ever checked in as files)
+*.db
+*.sqlite3
+
+# --- Frontend (Next.js) — extra rules at repo root ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/build/
+frontend/.vercel/
+frontend/.env*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# --- OS & editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# --- Logs & misc ---
+*.log
+coverage/
+.turbo
