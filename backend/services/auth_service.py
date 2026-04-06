@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 from typing import Optional
 import os
+import bcrypt as _bcrypt
+
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.models import User, Session
@@ -15,23 +16,16 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 
-# Encapsulation — password hashing logic is hidden inside this service
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 class AuthService:
-    """
-    Handles all authentication logic.
-    Single Responsibility — only deals with auth, nothing else.
-    """
 
     @staticmethod
     def hash_password(password: str) -> str:
-        return pwd_context.hash(password)
+        return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
     @staticmethod
     def verify_password(plain: str, hashed: str) -> bool:
-        return pwd_context.verify(plain, hashed)
+        return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
     @staticmethod
     def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -49,7 +43,6 @@ class AuthService:
 
     @staticmethod
     async def register(db: AsyncSession, email: str, password: str, full_name: str) -> User:
-        # Check if user already exists
         result = await db.execute(select(User).where(User.email == email))
         existing = result.scalar_one_or_none()
         if existing:
@@ -75,7 +68,6 @@ class AuthService:
 
         token = AuthService.create_access_token({"sub": str(user.id)})
 
-        # Store session in DB
         session = Session(
             user_id=user.id,
             token=token,
