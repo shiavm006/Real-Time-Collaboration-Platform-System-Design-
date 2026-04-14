@@ -3,13 +3,11 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.base import get_db, AsyncSessionLocal
-from db.models import OperationLog
 from services.auth_service import AuthService
 from services.document_service import DocumentService
 from services.permission_service import PermissionService
-from services.version_service import VersionService
+from services.ot_service import OTService
 from ot_engine.document import Document
-from ot_engine.operation import OperationFactory
 
 router = APIRouter(tags=["websocket"])
 
@@ -120,38 +118,15 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
                     if not doc:
                         continue
 
-                    # Build operation from message
-                    op_data = {**message["operation"], "user_id": str(user.id)}
-                    operation = OperationFactory.create(op_data)
-
-                    # Apply OT — transform and apply
-                    transformed_op = doc.apply_operation(operation)
-
-                    # Persist operation to DB
-                    log = OperationLog(
-                        document_id=doc_uuid,
-                        user_id=user.id,
-                        op_type=transformed_op.get_type().value,
-                        position=transformed_op.position,
-                        char=getattr(transformed_op, "char", None),
-                        revision=transformed_op.revision
+                    # Dependency Injected SRP Facade Engine 
+                    transformed_op_dict = await OTService.process_operation(
+                        db, doc_uuid, doc, user, message["operation"]
                     )
-                    db.add(log)
-
-                    # Persist updated content to DB
-                    db_doc = await DocumentService.get(db, doc_uuid)
-                    await DocumentService.update_content(db, db_doc, doc.content, doc.revision)
-
-                    # Snapshot if needed
-                    if await VersionService.should_snapshot(db_doc):
-                        await VersionService.create_snapshot(db, db_doc, user)
-
-                    await db.commit()
 
                 # Broadcast transformed op to all other clients
                 await manager.broadcast(doc_id, {
                     "type": "operation",
-                    "operation": transformed_op.to_dict(),
+                    "operation": transformed_op_dict,
                     "user_id": str(user.id)
                 }, exclude=websocket)
 
