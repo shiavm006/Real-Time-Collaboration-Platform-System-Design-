@@ -7,12 +7,12 @@ import { getOperationFromDiff, applyOperation } from '@/lib/ot';
 
 export function Editor({ documentId }: { documentId: string }) {
   const [content, setContent] = useState('');
-  const [title, setTitle] = useState('Loading...');
+  const [title, setTitle] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-  
+
   const wsRef = useRef<CollabWebSocket | null>(null);
 
   useEffect(() => {
@@ -64,9 +64,9 @@ export function Editor({ documentId }: { documentId: string }) {
     if (!user) return;
     const newText = e.target.value;
     const op = getOperationFromDiff(content, newText, revision, user.id);
-    
+
     setContent(newText);
-    
+
     if (op && wsRef.current) {
        setSaving(true);
        wsRef.current.send({ type: "operation", operation: op });
@@ -75,46 +75,154 @@ export function Editor({ documentId }: { documentId: string }) {
     }
   };
 
+  // Color palette for user avatars
+  const avatarColors = ['#e8590c', '#2b8a3e', '#1971c2', '#9c36b5', '#c92a2a', '#087f5b'];
+
   return (
-    <div className="flex-1 w-full flex flex-col items-center bg-surface-hover p-4 lg:p-8 animate-fade-in relative">
-      <div className="w-full max-w-4xl glass rounded-2xl p-4 mb-6 flex items-center justify-between shadow-sm border-border-color">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
+    <div style={{
+      flex: 1,
+      width: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+    }}>
+      {/* Thin toolbar */}
+      <div style={{
+        width: '100%',
+        borderBottom: '1px solid var(--border-color)',
+        padding: '0 24px',
+        height: '44px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#ffffff',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h2 style={{
+            fontSize: '13px',
+            fontWeight: 500,
+            color: 'var(--muted)',
+            margin: 0,
+          }}>
+            {title || 'Untitled'}
+          </h2>
           {saving && (
-            <span className="px-2.5 py-1 text-xs font-medium bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 rounded-full animate-pulse transition-all">
+            <span style={{
+              fontSize: '11px',
+              color: 'var(--muted)',
+              fontWeight: 400,
+            }}>
               Saving...
             </span>
           )}
         </div>
 
-        {/* Dynamic Active Users Presence */}
+        {/* Presence indicators */}
         {onlineUsers.length > 0 && (
-          <div className="flex items-center px-4 animate-fade-in">
-            <div className="flex -space-x-3">
-              {onlineUsers.slice(0, 3).map((uid, idx) => (
-                <div key={idx} className="w-8 h-8 rounded-full bg-brand-500 border-2 border-surface flex items-center justify-center text-xs text-white font-bold shadow-sm" style={{ zIndex: 10 - idx }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}>
+            <div style={{ display: 'flex', marginRight: '4px' }}>
+              {onlineUsers.slice(0, 4).map((uid, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    width: '22px',
+                    height: '22px',
+                    borderRadius: '50%',
+                    backgroundColor: avatarColors[idx % avatarColors.length],
+                    border: '2px solid #ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '10px',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    marginLeft: idx > 0 ? '-6px' : '0',
+                    zIndex: 10 - idx,
+                    position: 'relative',
+                  }}
+                >
                   {uid.substring(0, 1).toUpperCase()}
                 </div>
               ))}
             </div>
-            <span className="ml-4 text-xs font-medium text-foreground/60">{onlineUsers.length} editing</span>
+            <span style={{
+              fontSize: '11px',
+              color: 'var(--muted)',
+              fontWeight: 400,
+            }}>
+              {onlineUsers.length} {onlineUsers.length === 1 ? 'viewer' : 'viewers'}
+            </span>
           </div>
         )}
       </div>
 
-      <div className="w-full max-w-4xl bg-surface rounded-2xl shadow-xl shadow-brand-500/5 min-h-[600px] border border-border-color flex flex-col overflow-hidden animate-slide-up">
+      {/* Editor area — mimics a clean page */}
+      <div style={{
+        width: '100%',
+        maxWidth: '720px',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '48px 24px 96px',
+      }}>
+        {/* Page title display */}
+        <h1 style={{
+          fontSize: '40px',
+          fontWeight: 700,
+          color: 'var(--foreground)',
+          letterSpacing: '-0.03em',
+          marginBottom: '2px',
+          lineHeight: 1.2,
+        }}>
+          {title || 'Untitled'}
+        </h1>
+
+        {/* Subtle divider */}
+        <div style={{
+          width: '100%',
+          height: '1px',
+          backgroundColor: 'var(--border-color)',
+          margin: '16px 0 24px',
+          opacity: 0.6,
+        }} />
+
         {user ? (
-          <textarea 
-             className="flex-1 p-8 outline-none text-foreground leading-relaxed bg-transparent resize-none font-mono"
-             value={content}
-             onChange={handleChange}
-             placeholder="Start typing your collaborative document here..."
+          <textarea
+            style={{
+              flex: 1,
+              width: '100%',
+              outline: 'none',
+              border: 'none',
+              resize: 'none',
+              backgroundColor: 'transparent',
+              color: 'var(--foreground)',
+              fontSize: '16px',
+              lineHeight: '1.7',
+              fontFamily: 'inherit',
+              letterSpacing: '-0.003em',
+            }}
+            value={content}
+            onChange={handleChange}
+            placeholder="Start writing..."
           />
         ) : (
-          <div className="flex-1 p-8 text-center text-foreground/50">Please sign in to edit this document.</div>
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--muted)',
+            fontSize: '14px',
+          }}>
+            Please sign in to edit this document.
+          </div>
         )}
       </div>
     </div>
   );
 }
-

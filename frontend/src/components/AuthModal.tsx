@@ -55,78 +55,199 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '8px 10px',
+    fontSize: '14px',
+    border: '1px solid var(--border-color)',
+    borderRadius: '4px',
+    backgroundColor: 'var(--surface)',
+    color: 'var(--foreground)',
+    transition: 'border-color 0.15s',
+    lineHeight: '1.5',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '12px',
+    fontWeight: 500,
+    color: 'var(--muted)',
+    marginBottom: '4px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.04em',
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-sm glass rounded-2xl shadow-2xl p-8 border border-border-color animate-slide-up">
-        <h2 className="text-2xl font-bold tracking-tight mb-2">
-          {isLogin ? 'Welcome back' : 'Create an account'}
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '360px',
+          backgroundColor: '#ffffff',
+          borderRadius: '8px',
+          boxShadow: '0 4px 24px rgba(0, 0, 0, 0.12)',
+          padding: '32px',
+          position: 'relative',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 style={{
+          fontSize: '16px',
+          fontWeight: 600,
+          color: 'var(--foreground)',
+          marginBottom: '4px',
+          letterSpacing: '-0.01em',
+        }}>
+          {isLogin ? 'Welcome back' : 'Create your account'}
         </h2>
-        <p className="text-sm text-foreground/60 mb-6">
-          {isLogin ? 'Enter your details to access your documents.' : 'Sign up to start collaborating.'}
+        <p style={{
+          fontSize: '13px',
+          color: 'var(--muted)',
+          marginBottom: '24px',
+          lineHeight: '1.5',
+        }}>
+          {isLogin
+            ? 'Enter your credentials to continue.'
+            : 'Sign up to start collaborating on documents.'}
         </p>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 text-sm">
+          <div style={{
+            marginBottom: '16px',
+            padding: '8px 12px',
+            borderRadius: '4px',
+            backgroundColor: '#fef2f2',
+            color: '#dc2626',
+            fontSize: '13px',
+            border: '1px solid #fecaca',
+          }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+        <form onSubmit={handleSubmit}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {!isLogin && (
+              <div>
+                <label style={labelStyle}>Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  style={inputStyle}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#2383e2')}
+                  onBlur={e => (e.currentTarget.style.borderColor = 'var(--border-color)')}
+                  placeholder="John Doe"
+                />
+              </div>
+            )}
             <div>
-              <label className="block text-sm font-medium mb-1">Full Name</label>
-              <input 
-                type="text" 
-                required 
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                className="w-full px-3 py-2 bg-surface border border-border-color rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              <label style={labelStyle}>Email</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = '#2383e2')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--border-color)')}
+                placeholder="you@example.com"
               />
             </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
-            <input 
-              type="email" 
-              required 
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full px-3 py-2 bg-surface border border-border-color rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-            />
+            <div>
+              <label style={labelStyle}>Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = '#2383e2')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--border-color)')}
+                placeholder="••••••••"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
-            <input 
-              type="password" 
-              required 
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full px-3 py-2 bg-surface border border-border-color rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-            />
-          </div>
-          <button 
+
+          <button
             disabled={loading}
-            type="submit" 
-            className="w-full bg-brand-600 hover:bg-brand-500 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
+            type="submit"
+            style={{
+              width: '100%',
+              marginTop: '24px',
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: 500,
+              color: '#ffffff',
+              backgroundColor: '#2383e2',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.9'; }}
+            onMouseLeave={e => { if (!loading) e.currentTarget.style.opacity = '1'; }}
           >
-            {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Sign Up')}
+            {loading ? 'Please wait...' : (isLogin ? 'Continue' : 'Create account')}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm">
-          <span className="text-foreground/60">
-             {isLogin ? "Don't have an account? " : "Already have an account? "}
-          </span>
-          <button 
+        <div style={{
+          marginTop: '20px',
+          textAlign: 'center',
+          fontSize: '13px',
+          color: 'var(--muted)',
+        }}>
+          {isLogin ? "Don't have an account? " : "Already have an account? "}
+          <button
             type="button"
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
-            className="text-brand-500 hover:text-brand-400 font-medium"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#2383e2',
+              cursor: 'pointer',
+              fontWeight: 500,
+              fontSize: '13px',
+              padding: 0,
+            }}
           >
-            {isLogin ? 'Sign up' : 'Sign in'}
+            {isLogin ? 'Sign up' : 'Log in'}
           </button>
         </div>
-        
-        <button onClick={onClose} className="absolute top-4 right-4 text-foreground/40 hover:text-foreground">
+
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--muted)',
+            fontSize: '18px',
+            padding: '4px',
+            lineHeight: 1,
+            borderRadius: '4px',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+        >
           ✕
         </button>
       </div>

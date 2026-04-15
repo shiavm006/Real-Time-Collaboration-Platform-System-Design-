@@ -2,7 +2,7 @@ import { Dashboard } from "@/components/Dashboard";
 
 export default function Home() {
   return (
-    <div className="w-full flex-1 flex flex-col items-center">
+    <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' as const }}>
       <Dashboard />
     </div>
   );
