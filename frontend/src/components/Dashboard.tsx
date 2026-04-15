@@ -46,7 +46,7 @@ export function Dashboard() {
     e.preventDefault();
     setIsCreating(true);
     try {
-      const doc = await documentService.createDocument(newTitle || "Untitled Document");
+      const doc = await documentService.createDocument(newTitle || "Untitled");
       router.push(`/editor/${doc.id}`);
     } catch (e) {
       console.error("Failed to create document.");
@@ -54,85 +54,304 @@ export function Dashboard() {
     }
   };
 
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   return (
-    <div className="w-full max-w-5xl mx-auto px-6 py-12 animate-fade-in relative">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Recent Documents</h1>
-          <p className="text-sm text-foreground/60 mt-1">Pick up where you left off</p>
-        </div>
-        <button onClick={openCreateModal} className="bg-brand-600 hover:bg-brand-500 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-brand-500/20 active:scale-95 flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          New Document
+    <div style={{
+      width: '100%',
+      maxWidth: '900px',
+      margin: '0 auto',
+      padding: '48px 24px',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '32px',
+      }}>
+        <h1 style={{
+          fontSize: '24px',
+          fontWeight: 700,
+          color: 'var(--foreground)',
+          letterSpacing: '-0.025em',
+        }}>
+          Documents
+        </h1>
+        <button
+          onClick={openCreateModal}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '13px',
+            fontWeight: 500,
+            color: '#ffffff',
+            backgroundColor: '#2383e2',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '6px 14px',
+            borderRadius: '4px',
+            height: '32px',
+            transition: 'opacity 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          New page
         </button>
       </div>
 
-      {!loading && documents.length === 0 ? (
-        <div className="text-center py-20 text-foreground/50 border border-dashed border-border-color rounded-2xl">
-           <p>No documents found. Start by creating a new one!</p>
+      {/* Content */}
+      {loading ? (
+        <div style={{
+          padding: '60px 0',
+          textAlign: 'center',
+          color: 'var(--muted)',
+          fontSize: '14px',
+        }}>
+          Loading...
+        </div>
+      ) : documents.length === 0 ? (
+        <div style={{
+          padding: '80px 24px',
+          textAlign: 'center',
+          color: 'var(--muted)',
+          fontSize: '14px',
+          lineHeight: '1.6',
+        }}>
+          <svg
+            width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"
+            style={{ margin: '0 auto 16px', color: '#d4d4d4' }}
+          >
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <p style={{ marginBottom: '4px', color: 'var(--foreground)', fontWeight: 500 }}>No documents yet</p>
+          <p>Create your first page to get started.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {documents.map((doc, i) => (
-            <Link 
-              href={`/editor/${doc.id}`} 
+        <div>
+          {/* Table header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 120px',
+            padding: '8px 12px',
+            fontSize: '11px',
+            fontWeight: 500,
+            color: 'var(--muted)',
+            textTransform: 'uppercase' as const,
+            letterSpacing: '0.06em',
+            borderBottom: '1px solid var(--border-color)',
+          }}>
+            <span>Title</span>
+            <span style={{ textAlign: 'right' }}>Updated</span>
+          </div>
+
+          {/* Document rows */}
+          {documents.map((doc) => (
+            <Link
+              href={`/editor/${doc.id}`}
               key={doc.id}
-              className="group relative flex flex-col bg-surface hover:bg-surface-hover border border-border-color rounded-2xl p-5 transition-all duration-300 hover:shadow-xl hover:shadow-brand-500/5 hover:-translate-y-1 animate-slide-up"
-              style={{ animationDelay: `${i * 100}ms` }}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 120px',
+                padding: '10px 12px',
+                textDecoration: 'none',
+                color: 'inherit',
+                borderBottom: '1px solid var(--border-color)',
+                transition: 'background 0.1s',
+                alignItems: 'center',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <div className="h-32 mb-4 rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-900/40 dark:to-brand-800/20 flex items-center justify-center border border-brand-200/50 dark:border-brand-800/50 group-hover:scale-[1.02] transition-transform duration-300">
-                <svg className="w-12 h-12 text-brand-400 opacity-50" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-              </div>
-              <h3 className="font-semibold text-lg text-foreground truncate">{doc.title}</h3>
-              <div className="flex items-center justify-between mt-auto pt-4 text-xs text-foreground/50">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-brand-400"></span>
-                  Doc
+              <span style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--muted)', flexShrink: 0 }}>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                <span style={{
+                  fontSize: '14px',
+                  fontWeight: 400,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap' as const,
+                }}>
+                  {doc.title}
                 </span>
-                <span>{new Date(doc.updated_at).toLocaleDateString()}</span>
-              </div>
+              </span>
+              <span style={{
+                fontSize: '12px',
+                color: 'var(--muted)',
+                textAlign: 'right',
+              }}>
+                {formatDate(doc.updated_at)}
+              </span>
             </Link>
           ))}
         </div>
       )}
 
-      {/* Modern Create Document Modal */}
+      {/* Create Document Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md glass rounded-2xl shadow-2xl border border-border-color animate-slide-up overflow-hidden">
-            <div className="p-6 border-b border-border-color flex items-center justify-between">
-               <h2 className="text-xl font-bold tracking-tight text-foreground">Create New Document</h2>
-               <button onClick={() => setIsModalOpen(false)} className="text-foreground/40 hover:text-foreground transition-colors p-1" title="Close">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-               </button>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          }}
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '400px',
+              backgroundColor: '#ffffff',
+              borderRadius: '8px',
+              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.12)',
+              overflow: 'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{
+              padding: '20px 24px 16px',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <h2 style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--foreground)',
+              }}>
+                New page
+              </h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--muted)',
+                  padding: '4px',
+                  borderRadius: '4px',
+                  lineHeight: 1,
+                  fontSize: '16px',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                title="Close"
+              >
+                ✕
+              </button>
             </div>
-            
-            <form onSubmit={handleCreateDocument} className="p-6">
-              <div className="mb-6">
-                <label className="block text-sm font-medium mb-2 text-foreground/80">Document Title</label>
-                <input 
+
+            <form onSubmit={handleCreateDocument} style={{ padding: '20px 24px 24px' }}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: 'var(--muted)',
+                  marginBottom: '6px',
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.04em',
+                }}>
+                  Title
+                </label>
+                <input
                   autoFocus
-                  type="text" 
+                  type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="e.g. Architecture Design Draft"
-                  className="w-full px-4 py-3 bg-surface border border-border-color rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/50 text-foreground placeholder:text-foreground/30 transition-all font-medium"
+                  placeholder="Untitled"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    fontSize: '14px',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '4px',
+                    backgroundColor: 'var(--surface)',
+                    color: 'var(--foreground)',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#2383e2')}
+                  onBlur={e => (e.currentTarget.style.borderColor = 'var(--border-color)')}
                 />
               </div>
-              <div className="flex justify-end gap-3 mt-8">
-                <button 
-                  type="button" 
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '8px',
+              }}>
+                <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2.5 text-sm font-medium text-foreground hover:bg-surface border border-border-color rounded-xl transition-colors"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: 'var(--foreground)',
+                    backgroundColor: 'transparent',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isCreating}
-                  className="px-5 py-2.5 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-xl transition-all shadow-lg shadow-brand-500/20 active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center gap-2"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#ffffff',
+                    backgroundColor: '#2383e2',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: isCreating ? 'not-allowed' : 'pointer',
+                    opacity: isCreating ? 0.6 : 1,
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={e => { if (!isCreating) e.currentTarget.style.opacity = '0.9'; }}
+                  onMouseLeave={e => { if (!isCreating) e.currentTarget.style.opacity = '1'; }}
                 >
-                  {isCreating ? 'Creating...' : 'Create Document'}
+                  {isCreating ? 'Creating...' : 'Create'}
                 </button>
               </div>
             </form>
@@ -142,4 +361,3 @@ export function Dashboard() {
     </div>
   );
 }
-
