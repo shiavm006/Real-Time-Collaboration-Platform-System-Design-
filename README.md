@@ -120,7 +120,7 @@ Navigate to [`http://localhost:3000`](http://localhost:3000) to create a room an
 
 | Name | Role |
 |---|---|
-| **Shivam Mittal** | System Design, Software Engineering, Concurrency Core |
+| **Shivam Mittal** | Backend Engineering, Devops|
 | **Divya Singh** | System Design, Software Engineering, Concurrency Core |
 | **Kartik Yadav** | Frontend Engineering |
 
