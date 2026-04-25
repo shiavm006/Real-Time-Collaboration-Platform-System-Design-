@@ -1,9 +1,12 @@
+"use client";
+
 import { Dashboard } from "@/components/Dashboard";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
 export default function Home() {
   return (
-    <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' as const }}>
+    <DashboardLayout>
       <Dashboard />
-    </div>
+    </DashboardLayout>
   );
 }
