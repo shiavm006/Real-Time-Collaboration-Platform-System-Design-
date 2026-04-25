@@ -72,6 +72,14 @@ class DeleteOperation(Operation):
 
 # Factory Pattern — creates operations without exposing class details
 class OperationFactory:
+    """
+    FACTORY METHOD PATTERN
+    ----------------------
+    The OperationFactory abstracts the creation logic of different Operational 
+    Transformation types (Insert, Delete). This elegantly allows the engine 
+    to dynamically generate subclasses from incoming JSON payloads without 
+    tying high-level modules to concrete struct implementations.
+    """
     @staticmethod
     def create(data: dict) -> Operation:
         op_type = data.get("type")

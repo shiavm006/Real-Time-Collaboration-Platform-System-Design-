@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, Integer, ForeignKey, Enum, DateTime
+from sqlalchemy import String, Text, Integer, ForeignKey, Enum, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from db.base import Base
@@ -48,6 +48,7 @@ class Document(Base):
 
 class DocumentPermission(Base):
     __tablename__ = "document_permissions"
+    __table_args__ = (UniqueConstraint("document_id", "user_id", name="uq_doc_permission"),)
 
     id          : Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id : Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
