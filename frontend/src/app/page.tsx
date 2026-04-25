@@ -1,9 +1,12 @@
+"use client";
+
 import { Dashboard } from "@/components/Dashboard";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
 export default function Home() {
   return (
-    <div className="w-full flex-1 flex flex-col items-center">
+    <DashboardLayout>
       <Dashboard />
-    </div>
+    </DashboardLayout>
   );
 }

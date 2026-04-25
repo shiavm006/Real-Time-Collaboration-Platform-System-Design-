@@ -1,120 +1,214 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
-import { documentService, authService, User } from '@/lib/documentService';
-import { CollabWebSocket } from '@/lib/websocket';
-import { getOperationFromDiff, applyOperation } from '@/lib/ot';
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { documentService } from "@/lib/documentService";
+import { CollabWebSocket, type ConnectionState } from "@/lib/websocket";
+import { getOperationFromDiff, applyOperation } from "@/lib/ot";
+import { EditorNavbar } from "@/components/editor/EditorNavbar";
+import { EditorToolbar } from "@/components/editor/EditorToolbar";
+import { EditorArea } from "@/components/editor/EditorArea";
+import { VersionHistoryPanel } from "@/components/panels/VersionHistoryPanel";
+import { SharePanel } from "@/components/panels/SharePanel";
+import { CommentsPanel } from "@/components/panels/CommentsPanel";
+import { AIAssistantPanel } from "@/components/panels/AIAssistantPanel";
+import { SkeletonEditor } from "@/components/ui/Skeleton";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 
 export function Editor({ documentId }: { documentId: string }) {
-  const [content, setContent] = useState('');
-  const [title, setTitle] = useState('Loading...');
-  const [user, setUser] = useState<User | null>(null);
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  const [content, setContent] = useState("");
+  const [title, setTitle] = useState("Loading...");
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-  
+  const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
+  const [docLoading, setDocLoading] = useState(true);
+
+  // Panel states
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showAI, setShowAI] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   const wsRef = useRef<CollabWebSocket | null>(null);
+  const contentRef = useRef(content);
+
+  // Keep ref in sync
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated || !user) {
+      setDocLoading(false);
+      return;
+    }
+
     let ws: CollabWebSocket;
+
     const init = async () => {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem("token");
       if (!token) return;
 
       try {
-        const u = await authService.getMe();
-        setUser(u);
         const doc = await documentService.getDocument(documentId);
-        setContent(doc.content || '');
+        setContent(doc.content || "");
         setTitle(doc.title);
-        setRevision(doc.version || 0);
+        setRevision(doc.revision || 0);
+        setDocLoading(false);
 
         ws = new CollabWebSocket(documentId, token);
-        ws.on('message', (msg: any) => {
-           if (msg.type === "operation") {
-              const op = msg.operation;
-              // Only apply operations from OTHER users
-              if (msg.user_id !== u.id) {
-                 setContent(prev => applyOperation(prev, op));
-                 setRevision(op.revision + 1);
-              }
-           }
-           if (msg.type === "init") {
-              setContent(msg.content);
-              setRevision(msg.revision);
-           }
-           if (msg.type === "presence") {
-              setOnlineUsers(msg.online_users || []);
-           }
+
+        ws.onStateChange((state) => {
+          setConnectionState(state);
         });
+
+        ws.on("message", (msg: any) => {
+          if (msg.type === "operation") {
+            if (msg.user_id !== user.id) {
+              setContent((prev) => applyOperation(prev, msg.operation));
+              setRevision(msg.operation.revision + 1);
+            }
+          }
+          if (msg.type === "init") {
+            setContent(msg.content);
+            setRevision(msg.revision);
+          }
+          if (msg.type === "presence") {
+            setOnlineUsers(msg.online_users || []);
+          }
+        });
+
         ws.connect();
         wsRef.current = ws;
       } catch (e) {
-        console.error("Failed to load document or WS", e);
+        console.error("Failed to load document", e);
+        setDocLoading(false);
       }
     };
+
     init();
 
     return () => {
       if (wsRef.current) wsRef.current.disconnect();
     };
-  }, [documentId]);
+  }, [documentId, user, isAuthenticated, authLoading]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (!user) return;
-    const newText = e.target.value;
-    const op = getOperationFromDiff(content, newText, revision, user.id);
-    
-    setContent(newText);
-    
-    if (op && wsRef.current) {
-       setSaving(true);
-       wsRef.current.send({ type: "operation", operation: op });
-       setRevision(r => r + 1);
-       setTimeout(() => setSaving(false), 500);
+  const handleContentChange = useCallback(
+    (newText: string) => {
+      if (!user) return;
+      const op = getOperationFromDiff(contentRef.current, newText, revision, user.id);
+
+      setContent(newText);
+
+      if (op && wsRef.current) {
+        setSaving(true);
+        wsRef.current.send({ type: "operation", operation: op });
+        setRevision((r) => r + 1);
+        setTimeout(() => setSaving(false), 600);
+      }
+    },
+    [revision, user]
+  );
+
+  const handleDelete = async () => {
+    try {
+      await documentService.deleteDocument(documentId);
+      router.push("/");
+    } catch {
+      console.error("Failed to delete");
     }
   };
 
-  return (
-    <div className="flex-1 w-full flex flex-col items-center bg-surface-hover p-4 lg:p-8 animate-fade-in relative">
-      <div className="w-full max-w-4xl glass rounded-2xl p-4 mb-6 flex items-center justify-between shadow-sm border-border-color">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
-          {saving && (
-            <span className="px-2.5 py-1 text-xs font-medium bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 rounded-full animate-pulse transition-all">
-              Saving...
-            </span>
-          )}
+  if (authLoading || docLoading) {
+    return (
+      <div className="flex-1 flex flex-col bg-background animate-fade-in">
+        <div className="h-14 border-b border-border-color bg-surface" />
+        <div className="border-b border-border-color bg-surface h-10" />
+        <SkeletonEditor />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-muted mb-2">Please sign in to view this document.</p>
+          <Button variant="primary" onClick={() => router.push("/")}>
+            Go to Dashboard
+          </Button>
         </div>
-
-        {/* Dynamic Active Users Presence */}
-        {onlineUsers.length > 0 && (
-          <div className="flex items-center px-4 animate-fade-in">
-            <div className="flex -space-x-3">
-              {onlineUsers.slice(0, 3).map((uid, idx) => (
-                <div key={idx} className="w-8 h-8 rounded-full bg-brand-500 border-2 border-surface flex items-center justify-center text-xs text-white font-bold shadow-sm" style={{ zIndex: 10 - idx }}>
-                  {uid.substring(0, 1).toUpperCase()}
-                </div>
-              ))}
-            </div>
-            <span className="ml-4 text-xs font-medium text-foreground/60">{onlineUsers.length} editing</span>
-          </div>
-        )}
       </div>
+    );
+  }
 
-      <div className="w-full max-w-4xl bg-surface rounded-2xl shadow-xl shadow-brand-500/5 min-h-[600px] border border-border-color flex flex-col overflow-hidden animate-slide-up">
-        {user ? (
-          <textarea 
-             className="flex-1 p-8 outline-none text-foreground leading-relaxed bg-transparent resize-none font-mono"
-             value={content}
-             onChange={handleChange}
-             placeholder="Start typing your collaborative document here..."
-          />
-        ) : (
-          <div className="flex-1 p-8 text-center text-foreground/50">Please sign in to edit this document.</div>
-        )}
-      </div>
+  return (
+    <div className="flex-1 flex flex-col bg-background min-h-screen">
+      <EditorNavbar
+        title={title}
+        connectionState={connectionState}
+        isSaving={saving}
+        onlineUsers={onlineUsers}
+        onOpenVersionHistory={() => setShowVersionHistory(true)}
+        onOpenShare={() => setShowShare(true)}
+        onOpenComments={() => setShowComments(true)}
+        onOpenAI={() => setShowAI(true)}
+        onDelete={() => setShowDeleteConfirm(true)}
+      />
+
+      <EditorToolbar />
+
+      <EditorArea
+        content={content}
+        onChange={handleContentChange}
+        disabled={!isAuthenticated}
+        placeholder="Start writing your collaborative document here..."
+      />
+
+      {/* Panels */}
+      <VersionHistoryPanel
+        isOpen={showVersionHistory}
+        onClose={() => setShowVersionHistory(false)}
+        documentId={documentId}
+      />
+      <SharePanel
+        isOpen={showShare}
+        onClose={() => setShowShare(false)}
+        documentId={documentId}
+      />
+      <CommentsPanel
+        isOpen={showComments}
+        onClose={() => setShowComments(false)}
+      />
+      <AIAssistantPanel
+        isOpen={showAI}
+        onClose={() => setShowAI(false)}
+      />
+
+      {/* Delete confirmation */}
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete Document"
+        description={`Are you sure you want to delete "${title}"? This action cannot be undone.`}
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleDelete}>
+            Delete
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
-
