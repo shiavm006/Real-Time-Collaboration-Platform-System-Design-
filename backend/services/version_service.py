@@ -21,7 +21,7 @@ class VersionService:
             document_id=doc.id,
             created_by=user.id,
             snapshot=doc.content,
-            revision=doc.revision
+            revision=doc.revision,
         )
         db.add(version)
 

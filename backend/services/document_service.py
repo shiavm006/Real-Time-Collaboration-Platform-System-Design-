@@ -18,9 +18,7 @@ class DocumentService:
         # Owner gets owner permission automatically
         await db.flush()  # get doc.id before commit
         permission = DocumentPermission(
-            document_id=doc.id,
-            user_id=owner.id,
-            role=RoleEnum.owner
+            document_id=doc.id, user_id=owner.id, role=RoleEnum.owner
         )
         db.add(permission)
         await db.commit()
@@ -42,7 +40,9 @@ class DocumentService:
         return list(result.scalars().all())
 
     @staticmethod
-    async def update_content(db: AsyncSession, doc: Document, content: str, revision: int):
+    async def update_content(
+        db: AsyncSession, doc: Document, content: str, revision: int
+    ):
         doc.content = content
         doc.revision = revision
 

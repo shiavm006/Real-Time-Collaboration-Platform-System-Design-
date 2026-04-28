@@ -27,7 +27,8 @@ export function Editor({ documentId }: { documentId: string }) {
   const [saving, setSaving] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
-  const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>("disconnected");
   const [docLoading, setDocLoading] = useState(true);
 
   // Panel states
@@ -79,10 +80,13 @@ export function Editor({ documentId }: { documentId: string }) {
         ws.on("message", (msg: any) => {
           if (msg.type === "operation") {
             if (msg.user_id !== user.id) {
-              const newContent = applyOperation(contentRef.current, msg.operation);
+              const newContent = applyOperation(
+                contentRef.current,
+                msg.operation,
+              );
               contentRef.current = newContent;
               revisionRef.current = msg.operation.revision;
-              
+
               setContent(newContent);
               setRevision(msg.operation.revision);
             }
@@ -94,7 +98,9 @@ export function Editor({ documentId }: { documentId: string }) {
             setRevision(msg.revision);
           }
           if (msg.type === "presence") {
-            setOnlineUsers(Array.from(new Set(msg.online_users as string[])) || []);
+            setOnlineUsers(
+              Array.from(new Set(msg.online_users as string[])) || [],
+            );
           }
           if (msg.type === "cursor") {
             if (msg.user_id !== user.id) {
@@ -102,10 +108,12 @@ export function Editor({ documentId }: { documentId: string }) {
                 if (!prev.includes(msg.user_id)) return [...prev, msg.user_id];
                 return prev;
               });
-              
+
               // Remove typing indicator after 2 seconds of inactivity
               setTimeout(() => {
-                setTypingUsers((prev) => prev.filter(id => id !== msg.user_id));
+                setTypingUsers((prev) =>
+                  prev.filter((id) => id !== msg.user_id),
+                );
               }, 2000);
             }
           }
@@ -129,7 +137,12 @@ export function Editor({ documentId }: { documentId: string }) {
   const handleContentChange = useCallback(
     (newText: string) => {
       if (!user) return;
-      const op = getOperationFromDiff(contentRef.current, newText, revisionRef.current, user.id);
+      const op = getOperationFromDiff(
+        contentRef.current,
+        newText,
+        revisionRef.current,
+        user.id,
+      );
 
       contentRef.current = newText;
       setContent(newText);
@@ -137,22 +150,25 @@ export function Editor({ documentId }: { documentId: string }) {
       if (op && wsRef.current) {
         setSaving(true);
         wsRef.current.send({ type: "operation", operation: op });
-        
+
         const newRev = revisionRef.current + 1;
         revisionRef.current = newRev;
         setRevision(newRev);
-        
+
         setTimeout(() => setSaving(false), 600);
       }
     },
-    [user]
+    [user],
   );
 
-  const handleCursorMove = useCallback((position: number) => {
-    if (wsRef.current && isAuthenticated) {
-      wsRef.current.send({ type: "cursor", position });
-    }
-  }, [isAuthenticated]);
+  const handleCursorMove = useCallback(
+    (position: number) => {
+      if (wsRef.current && isAuthenticated) {
+        wsRef.current.send({ type: "cursor", position });
+      }
+    },
+    [isAuthenticated],
+  );
 
   const handleDelete = async () => {
     try {
@@ -177,7 +193,9 @@ export function Editor({ documentId }: { documentId: string }) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
         <div className="text-center">
-          <p className="text-muted mb-2">Please sign in to view this document.</p>
+          <p className="text-muted mb-2">
+            Please sign in to view this document.
+          </p>
           <Button variant="primary" onClick={() => router.push("/")}>
             Go to Dashboard
           </Button>
@@ -226,10 +244,7 @@ export function Editor({ documentId }: { documentId: string }) {
         isOpen={showComments}
         onClose={() => setShowComments(false)}
       />
-      <AIAssistantPanel
-        isOpen={showAI}
-        onClose={() => setShowAI(false)}
-      />
+      <AIAssistantPanel isOpen={showAI} onClose={() => setShowAI(false)} />
 
       {/* Delete confirmation */}
       <Modal
@@ -239,7 +254,10 @@ export function Editor({ documentId }: { documentId: string }) {
         description={`Are you sure you want to delete "${title}"? This action cannot be undone.`}
       >
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowDeleteConfirm(false)}
+          >
             Cancel
           </Button>
           <Button variant="danger" onClick={handleDelete}>

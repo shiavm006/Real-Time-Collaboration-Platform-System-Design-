@@ -21,16 +21,22 @@ class AuthService:
 
     @staticmethod
     def hash_password(password: str) -> str:
-        return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
+        return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode(
+            "utf-8"
+        )
 
     @staticmethod
     def verify_password(plain: str, hashed: str) -> bool:
         return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
     @staticmethod
-    def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    def create_access_token(
+        data: dict, expires_delta: Optional[timedelta] = None
+    ) -> str:
         to_encode = data.copy()
-        expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+        expire = datetime.utcnow() + (
+            expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
         to_encode.update({"exp": expire})
         return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -42,7 +48,9 @@ class AuthService:
             return None
 
     @staticmethod
-    async def register(db: AsyncSession, email: str, password: str, full_name: str) -> User:
+    async def register(
+        db: AsyncSession, email: str, password: str, full_name: str
+    ) -> User:
         result = await db.execute(select(User).where(User.email == email))
         existing = result.scalar_one_or_none()
         if existing:
@@ -51,7 +59,7 @@ class AuthService:
         user = User(
             email=email,
             hashed_password=AuthService.hash_password(password),
-            full_name=full_name
+            full_name=full_name,
         )
         db.add(user)
         await db.commit()
@@ -71,7 +79,8 @@ class AuthService:
         session = Session(
             user_id=user.id,
             token=token,
-            expires_at=datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            expires_at=datetime.utcnow()
+            + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         )
         db.add(session)
         await db.commit()

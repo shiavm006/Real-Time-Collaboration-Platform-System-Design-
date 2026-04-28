@@ -16,7 +16,11 @@ interface DropdownMenuProps {
   align?: "left" | "right";
 }
 
-export function DropdownMenu({ trigger, items, align = "right" }: DropdownMenuProps) {
+export function DropdownMenu({
+  trigger,
+  items,
+  align = "right",
+}: DropdownMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -59,13 +63,16 @@ export function DropdownMenu({ trigger, items, align = "right" }: DropdownMenuPr
                 w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left
                 transition-colors duration-100
                 disabled:opacity-40 disabled:pointer-events-none
-                ${item.variant === "danger"
-                  ? "text-danger hover:bg-danger/10"
-                  : "text-foreground hover:bg-surface-hover"
+                ${
+                  item.variant === "danger"
+                    ? "text-danger hover:bg-danger/10"
+                    : "text-foreground hover:bg-surface-hover"
                 }
               `}
             >
-              {item.icon && <span className="w-4 h-4 shrink-0 opacity-60">{item.icon}</span>}
+              {item.icon && (
+                <span className="w-4 h-4 shrink-0 opacity-60">{item.icon}</span>
+              )}
               {item.label}
             </button>
           ))}

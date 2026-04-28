@@ -11,11 +11,13 @@ class PermissionService:
     """
 
     @staticmethod
-    async def get_role(db: AsyncSession, doc_id: uuid.UUID, user_id: uuid.UUID) -> RoleEnum | None:
+    async def get_role(
+        db: AsyncSession, doc_id: uuid.UUID, user_id: uuid.UUID
+    ) -> RoleEnum | None:
         result = await db.execute(
             select(DocumentPermission).where(
                 DocumentPermission.document_id == doc_id,
-                DocumentPermission.user_id == user_id
+                DocumentPermission.user_id == user_id,
             )
         )
         perm = result.scalar_one_or_none()
@@ -32,12 +34,14 @@ class PermissionService:
         return role is not None  # any role can view
 
     @staticmethod
-    async def grant(db: AsyncSession, doc_id: uuid.UUID, user_id: uuid.UUID, role: RoleEnum):
+    async def grant(
+        db: AsyncSession, doc_id: uuid.UUID, user_id: uuid.UUID, role: RoleEnum
+    ):
         # Check if permission already exists
         result = await db.execute(
             select(DocumentPermission).where(
                 DocumentPermission.document_id == doc_id,
-                DocumentPermission.user_id == user_id
+                DocumentPermission.user_id == user_id,
             )
         )
         existing = result.scalar_one_or_none()
@@ -53,7 +57,7 @@ class PermissionService:
         result = await db.execute(
             select(DocumentPermission).where(
                 DocumentPermission.document_id == doc_id,
-                DocumentPermission.user_id == user_id
+                DocumentPermission.user_id == user_id,
             )
         )
         perm = result.scalar_one_or_none()
@@ -62,8 +66,11 @@ class PermissionService:
             await db.commit()
 
     @staticmethod
-    async def get_document_permissions(db: AsyncSession, doc_id: uuid.UUID) -> list[DocumentPermission]:
+    async def get_document_permissions(
+        db: AsyncSession, doc_id: uuid.UUID
+    ) -> list[DocumentPermission]:
         from sqlalchemy.orm import joinedload
+
         result = await db.execute(
             select(DocumentPermission)
             .options(joinedload(DocumentPermission.user))

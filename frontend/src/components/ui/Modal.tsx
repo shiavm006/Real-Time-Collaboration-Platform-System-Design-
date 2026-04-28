@@ -12,12 +12,19 @@ interface ModalProps {
   maxWidth?: string;
 }
 
-export function Modal({ isOpen, onClose, children, title, description, maxWidth = "max-w-md" }: ModalProps) {
+export function Modal({
+  isOpen,
+  onClose,
+  children,
+  title,
+  description,
+  maxWidth = "max-w-md",
+}: ModalProps) {
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     },
-    [onClose]
+    [onClose],
   );
 
   useEffect(() => {
@@ -58,7 +65,9 @@ export function Modal({ isOpen, onClose, children, title, description, maxWidth 
         {(title || description) && (
           <div className="px-6 pt-6 pb-0">
             {title && (
-              <h2 className="text-lg font-semibold text-foreground tracking-tight">{title}</h2>
+              <h2 className="text-lg font-semibold text-foreground tracking-tight">
+                {title}
+              </h2>
             )}
             {description && (
               <p className="text-sm text-muted mt-1">{description}</p>

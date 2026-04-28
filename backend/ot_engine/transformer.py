@@ -1,4 +1,9 @@
-from ot_engine.operation import Operation, InsertOperation, DeleteOperation, OperationType
+from ot_engine.operation import (
+    Operation,
+    InsertOperation,
+    DeleteOperation,
+    OperationType,
+)
 
 
 # Strategy Pattern — transform algorithm is encapsulated and swappable
@@ -31,7 +36,9 @@ class Transformer:
         raise ValueError("Unknown operation type combination")
 
     @staticmethod
-    def _transform_insert_insert(op1: InsertOperation, op2: InsertOperation) -> InsertOperation:
+    def _transform_insert_insert(
+        op1: InsertOperation, op2: InsertOperation
+    ) -> InsertOperation:
         """
         Both users inserted at the same time.
 
@@ -46,7 +53,9 @@ class Transformer:
         """
         if op1.position < op2.position:
             # op1 pushed everything right, so op2 must move right too
-            return InsertOperation(op2.position + len(op1.char), op2.char, op2.revision, op2.user_id)
+            return InsertOperation(
+                op2.position + len(op1.char), op2.char, op2.revision, op2.user_id
+            )
 
         elif op1.position > op2.position:
             # op1 is to the right, op2 position unaffected
@@ -55,12 +64,18 @@ class Transformer:
         else:
             # Same position — use user_id as tie-breaker for determinism
             if op1.user_id <= op2.user_id:
-                return InsertOperation(op2.position + len(op1.char), op2.char, op2.revision, op2.user_id)
+                return InsertOperation(
+                    op2.position + len(op1.char), op2.char, op2.revision, op2.user_id
+                )
             else:
-                return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
+                return InsertOperation(
+                    op2.position, op2.char, op2.revision, op2.user_id
+                )
 
     @staticmethod
-    def _transform_insert_delete(op1: InsertOperation, op2: DeleteOperation) -> DeleteOperation:
+    def _transform_insert_delete(
+        op1: InsertOperation, op2: DeleteOperation
+    ) -> DeleteOperation:
         """
         op1 inserted, op2 deleted at the same time.
 
@@ -71,12 +86,16 @@ class Transformer:
                 → op2's position stays the same
         """
         if op1.position <= op2.position:
-            return DeleteOperation(op2.position + len(op1.char), op2.revision, op2.user_id)
+            return DeleteOperation(
+                op2.position + len(op1.char), op2.revision, op2.user_id
+            )
         else:
             return DeleteOperation(op2.position, op2.revision, op2.user_id)
 
     @staticmethod
-    def _transform_delete_insert(op1: DeleteOperation, op2: InsertOperation) -> InsertOperation:
+    def _transform_delete_insert(
+        op1: DeleteOperation, op2: InsertOperation
+    ) -> InsertOperation:
         """
         op1 deleted, op2 inserted at the same time.
 
@@ -87,12 +106,16 @@ class Transformer:
                 → op2's position stays the same
         """
         if op1.position < op2.position:
-            return InsertOperation(op2.position - op1.length, op2.char, op2.revision, op2.user_id)
+            return InsertOperation(
+                op2.position - op1.length, op2.char, op2.revision, op2.user_id
+            )
         else:
             return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
 
     @staticmethod
-    def _transform_delete_delete(op1: DeleteOperation, op2: DeleteOperation) -> Operation:
+    def _transform_delete_delete(
+        op1: DeleteOperation, op2: DeleteOperation
+    ) -> Operation:
         """
         Both users deleted at the same time.
 
@@ -106,7 +129,9 @@ class Transformer:
                 → op2 becomes a no-op (nothing left to delete)
         """
         if op1.position < op2.position:
-            return DeleteOperation(op2.position - op1.length, op2.revision, op2.user_id, op2.length)
+            return DeleteOperation(
+                op2.position - op1.length, op2.revision, op2.user_id, op2.length
+            )
 
         elif op1.position > op2.position:
             return DeleteOperation(op2.position, op2.revision, op2.user_id, op2.length)
@@ -132,5 +157,5 @@ class NoOpOperation(Operation):
             "type": "noop",
             "position": -1,
             "revision": self.revision,
-            "user_id": self.user_id
+            "user_id": self.user_id,
         }

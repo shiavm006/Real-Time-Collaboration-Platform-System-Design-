@@ -2,9 +2,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
+
 class OperationType(Enum):
     INSERT = "insert"
     DELETE = "delete"
+
 
 # Abstract base class — Abstraction + OOP
 class Operation(ABC):
@@ -33,7 +35,7 @@ class InsertOperation(Operation):
         self.char = char
 
     def apply(self, content: str) -> str:
-        return content[:self.position] + self.char + content[self.position:]
+        return content[: self.position] + self.char + content[self.position :]
 
     def get_type(self) -> OperationType:
         return OperationType.INSERT
@@ -44,7 +46,7 @@ class InsertOperation(Operation):
             "position": self.position,
             "char": self.char,
             "revision": self.revision,
-            "user_id": self.user_id
+            "user_id": self.user_id,
         }
 
 
@@ -57,7 +59,7 @@ class DeleteOperation(Operation):
     def apply(self, content: str) -> str:
         if self.position >= len(content):
             return content
-        return content[:self.position] + content[self.position + self.length:]
+        return content[: self.position] + content[self.position + self.length :]
 
     def get_type(self) -> OperationType:
         return OperationType.DELETE
@@ -68,7 +70,7 @@ class DeleteOperation(Operation):
             "position": self.position,
             "length": self.length,
             "revision": self.revision,
-            "user_id": self.user_id
+            "user_id": self.user_id,
         }
 
 
@@ -77,11 +79,12 @@ class OperationFactory:
     """
     FACTORY METHOD PATTERN
     ----------------------
-    The OperationFactory abstracts the creation logic of different Operational 
-    Transformation types (Insert, Delete). This elegantly allows the engine 
-    to dynamically generate subclasses from incoming JSON payloads without 
+    The OperationFactory abstracts the creation logic of different Operational
+    Transformation types (Insert, Delete). This elegantly allows the engine
+    to dynamically generate subclasses from incoming JSON payloads without
     tying high-level modules to concrete struct implementations.
     """
+
     @staticmethod
     def create(data: dict) -> Operation:
         op_type = data.get("type")

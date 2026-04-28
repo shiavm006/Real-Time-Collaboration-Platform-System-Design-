@@ -1,4 +1,8 @@
-export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
+export type ConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected";
 type Handler = (data: any) => void;
 type StateHandler = (state: ConnectionState) => void;
 
@@ -15,8 +19,8 @@ export class CollabWebSocket {
 
   constructor(docId: string, token: string) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL
-      ? process.env.NEXT_PUBLIC_API_URL.replace('http', 'ws')
-      : 'ws://localhost:8000';
+      ? process.env.NEXT_PUBLIC_API_URL.replace("http", "ws")
+      : "ws://localhost:8000";
     this.url = `${baseUrl}/ws/${docId}?token=${token}`;
   }
 
@@ -26,7 +30,7 @@ export class CollabWebSocket {
 
   private setState(state: ConnectionState) {
     this._state = state;
-    this.stateHandlers.forEach(fn => fn(state));
+    this.stateHandlers.forEach((fn) => fn(state));
   }
 
   connect() {
@@ -46,13 +50,13 @@ export class CollabWebSocket {
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
       this.setState("connected");
-      this.emit('connect', null);
+      this.emit("connect", null);
     };
 
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        this.emit('message', data);
+        this.emit("message", data);
       } catch (e) {
         console.error("Failed to parse websocket message", e);
       }
@@ -60,7 +64,7 @@ export class CollabWebSocket {
 
     this.ws.onclose = () => {
       this.ws = null;
-      this.emit('disconnect', null);
+      this.emit("disconnect", null);
 
       if (!this.intentionalClose) {
         this.setState("reconnecting");
@@ -120,6 +124,6 @@ export class CollabWebSocket {
   }
 
   private emit(event: string, data: any) {
-    this.handlers.get(event)?.forEach(fn => fn(data));
+    this.handlers.get(event)?.forEach((fn) => fn(data));
   }
 }

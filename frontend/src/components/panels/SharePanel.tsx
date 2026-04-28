@@ -12,19 +12,48 @@ interface SharePanelProps {
 }
 
 const CloseIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
 
 const CopyIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
   </svg>
 );
 
 const CheckIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
@@ -69,7 +98,9 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
   if (!isOpen) return null;
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/editor/${documentId}`);
+    navigator.clipboard.writeText(
+      `${window.location.origin}/editor/${documentId}`,
+    );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -93,7 +124,9 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {/* Add people */}
           <div>
-            <h4 className="text-sm font-medium text-foreground mb-3">Invite people</h4>
+            <h4 className="text-sm font-medium text-foreground mb-3">
+              Invite people
+            </h4>
             <div className="flex gap-2">
               <div className="flex-1">
                 <Input
@@ -111,7 +144,13 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
                 <option value="viewer">Viewer</option>
               </select>
             </div>
-            <Button variant="primary" size="sm" className="mt-3 w-full" isLoading={loading} onClick={handleInvite}>
+            <Button
+              variant="primary"
+              size="sm"
+              className="mt-3 w-full"
+              isLoading={loading}
+              onClick={handleInvite}
+            >
               Send invite
             </Button>
           </div>
@@ -121,10 +160,14 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
 
           {/* Copy link */}
           <div>
-            <h4 className="text-sm font-medium text-foreground mb-3">Share link</h4>
+            <h4 className="text-sm font-medium text-foreground mb-3">
+              Share link
+            </h4>
             <div className="flex items-center gap-2 p-3 bg-surface-hover rounded-lg border border-border-color">
               <p className="flex-1 text-xs text-muted truncate font-mono">
-                {typeof window !== "undefined" ? `${window.location.origin}/editor/${documentId}` : ""}
+                {typeof window !== "undefined"
+                  ? `${window.location.origin}/editor/${documentId}`
+                  : ""}
               </p>
               <Button
                 variant="secondary"
@@ -139,7 +182,9 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
 
           {/* People with access */}
           <div>
-            <h4 className="text-sm font-medium text-foreground mb-3">People with access</h4>
+            <h4 className="text-sm font-medium text-foreground mb-3">
+              People with access
+            </h4>
             <div className="space-y-3">
               {permissions.length === 0 ? (
                 <div className="text-xs text-muted py-4 text-center bg-surface-hover rounded-lg">
@@ -147,9 +192,14 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
                 </div>
               ) : (
                 permissions.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between bg-surface-hover p-3 rounded-lg border border-border-color">
+                  <div
+                    key={i}
+                    className="flex items-center justify-between bg-surface-hover p-3 rounded-lg border border-border-color"
+                  >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{p.full_name}</p>
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {p.full_name}
+                      </p>
                       <p className="text-xs text-muted truncate">{p.email}</p>
                     </div>
                     <span className="text-xs font-medium px-2 py-1 bg-surface border border-border-color rounded text-muted capitalize">

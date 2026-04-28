@@ -5,10 +5,11 @@ Revises: 3ee48d860c90
 Create Date: 2026-04-15
 
 """
+
 from alembic import op
 
-revision = 'a1b2c3d4e5f6'
-down_revision = '3ee48d860c90'
+revision = "a1b2c3d4e5f6"
+down_revision = "3ee48d860c90"
 branch_labels = None
 depends_on = None
 

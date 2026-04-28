@@ -21,6 +21,7 @@ router = APIRouter(tags=["websocket"])
 
 # Observer Pattern — ConnectionManager observes all active connections
 
+
 # and broadcasts to all subscribers of a document room
 class ConnectionManager:
     """
@@ -28,6 +29,7 @@ class ConnectionManager:
     Singleton — one instance shared across the app.
     Observer Pattern + Redis Pub/Sub for multi-server horizontal scaling.
     """
+
     def __init__(self):
         # doc_id -> list of (websocket, user_id, connection_id)
         self._rooms: dict[str, list[tuple[WebSocket, str, str]]] = {}
@@ -35,42 +37,57 @@ class ConnectionManager:
         self._documents: dict[str, Document] = {}
         # doc_id -> asyncio.Task (the Redis listener loop for this room)
         self._pubsub_tasks: dict[str, asyncio.Task] = {}
-        
+
         # Initialize Redis global connection pool
         self.redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 
-    async def connect(self, doc_id: str, websocket: WebSocket, user_id: str, content: str, revision: int) -> str:
+    async def connect(
+        self,
+        doc_id: str,
+        websocket: WebSocket,
+        user_id: str,
+        content: str,
+        revision: int,
+    ) -> str:
         """Accepts connection, yields unique connection_id, starts pubsub if needed."""
         await websocket.accept()
         connection_id = str(uuid.uuid4())
-        
+
         if doc_id not in self._rooms:
             self._rooms[doc_id] = []
             self._documents[doc_id] = Document(doc_id, content, revision)
-            
+
             # Subscribing to Redis channel for this exact document!
             pubsub = self.redis.pubsub()
             await pubsub.subscribe(f"doc_channel:{doc_id}")
             task = asyncio.create_task(self._pubsub_listener(doc_id, pubsub))
             self._pubsub_tasks[doc_id] = task
-            
+
         self._rooms[doc_id].append((websocket, user_id, connection_id))
 
         # Send current doc state to newly connected client directly (Local action)
-        await websocket.send_text(json.dumps({
-            "type": "init",
-            "content": self._documents[doc_id].content,
-            "revision": self._documents[doc_id].revision
-        }))
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "init",
+                    "content": self._documents[doc_id].content,
+                    "revision": self._documents[doc_id].revision,
+                }
+            )
+        )
 
         # Notify entire Redis cluster that a new user joined
-        await self.broadcast(doc_id, {
-            "type": "presence",
-            "user_id": user_id,
-            "action": "joined",
-            "online_users": [uid for _, uid, _ in self._rooms[doc_id]]
-        }, exclude_conn_id=connection_id)
-        
+        await self.broadcast(
+            doc_id,
+            {
+                "type": "presence",
+                "user_id": user_id,
+                "action": "joined",
+                "online_users": [uid for _, uid, _ in self._rooms[doc_id]],
+            },
+            exclude_conn_id=connection_id,
+        )
+
         return connection_id
 
     async def _pubsub_listener(self, doc_id: str, pubsub):
@@ -80,7 +97,7 @@ class ConnectionManager:
                 if message["type"] == "message":
                     payload = json.loads(message["data"])
                     exclude_conn_id = payload.get("_exclude_conn_id")
-                    
+
                     # Fanout to local nodes
                     for ws, uid, cid in self._rooms.get(doc_id, []):
                         if cid != exclude_conn_id:
@@ -94,7 +111,8 @@ class ConnectionManager:
     def disconnect(self, doc_id: str, websocket: WebSocket, user_id: str):
         if doc_id in self._rooms:
             self._rooms[doc_id] = [
-                (ws, uid, cid) for ws, uid, cid in self._rooms[doc_id]
+                (ws, uid, cid)
+                for ws, uid, cid in self._rooms[doc_id]
                 if ws != websocket
             ]
             if not self._rooms[doc_id]:
@@ -113,6 +131,7 @@ class ConnectionManager:
 
     def get_document(self, doc_id: str) -> Document | None:
         return self._documents.get(doc_id)
+
 
 # Singleton application instance
 manager = ConnectionManager()
@@ -142,7 +161,9 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
             await websocket.close(code=1008)
             return
 
-        connection_id = await manager.connect(doc_id, websocket, str(user.id), db_doc.content, db_doc.revision)
+        connection_id = await manager.connect(
+            doc_id, websocket, str(user.id), db_doc.content, db_doc.revision
+        )
 
     try:
         while True:
@@ -153,7 +174,11 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
                 async with AsyncSessionLocal() as db:
                     # Check edit permission
                     if not await PermissionService.can_edit(db, doc_uuid, user.id):
-                        await websocket.send_text(json.dumps({"type": "error", "message": "No edit permission"}))
+                        await websocket.send_text(
+                            json.dumps(
+                                {"type": "error", "message": "No edit permission"}
+                            )
+                        )
                         continue
 
                     # Get in-memory document
@@ -161,32 +186,45 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
                     if not doc:
                         continue
 
-                    # Dependency Injected SRP Facade Engine 
+                    # Dependency Injected SRP Facade Engine
                     transformed_op_dict = await OTService.process_operation(
                         db, doc_uuid, doc, user, message["operation"]
                     )
 
                 # Broadcast transformed op globally to cluster
-                await manager.broadcast(doc_id, {
-                    "type": "operation",
-                    "operation": transformed_op_dict,
-                    "user_id": str(user.id)
-                }, exclude_conn_id=connection_id)
+                await manager.broadcast(
+                    doc_id,
+                    {
+                        "type": "operation",
+                        "operation": transformed_op_dict,
+                        "user_id": str(user.id),
+                    },
+                    exclude_conn_id=connection_id,
+                )
 
             elif message["type"] == "cursor":
                 # Broadcast cursor globally
-                await manager.broadcast(doc_id, {
-                    "type": "cursor",
-                    "user_id": str(user.id),
-                    "position": message.get("position", 0)
-                }, exclude_conn_id=connection_id)
+                await manager.broadcast(
+                    doc_id,
+                    {
+                        "type": "cursor",
+                        "user_id": str(user.id),
+                        "position": message.get("position", 0),
+                    },
+                    exclude_conn_id=connection_id,
+                )
 
     except WebSocketDisconnect:
         async with AsyncSessionLocal() as db:
             manager.disconnect(doc_id, websocket, str(user.id))
-            await manager.broadcast(doc_id, {
-                "type": "presence",
-                "user_id": str(user.id),
-                "action": "left",
-                "online_users": [uid for _, uid, _ in manager._rooms.get(doc_id, [])]
-            })
+            await manager.broadcast(
+                doc_id,
+                {
+                    "type": "presence",
+                    "user_id": str(user.id),
+                    "action": "left",
+                    "online_users": [
+                        uid for _, uid, _ in manager._rooms.get(doc_id, [])
+                    ],
+                },
+            )

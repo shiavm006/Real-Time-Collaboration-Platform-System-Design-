@@ -15,7 +15,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-semibold text-foreground mb-1.5">
+          <label
+            htmlFor={inputId}
+            className="block text-sm font-semibold text-foreground mb-1.5"
+          >
             {label}
           </label>
         )}
@@ -48,7 +51,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
       </div>
     );
-  }
+  },
 );
 
 Input.displayName = "Input";

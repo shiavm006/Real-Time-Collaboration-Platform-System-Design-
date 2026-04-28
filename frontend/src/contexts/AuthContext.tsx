@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
 import { api } from "@/lib/api";
 
 export interface User {
@@ -14,7 +21,11 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    fullName: string,
+  ) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -47,21 +58,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser();
   }, [refreshUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const formData = new URLSearchParams();
-    formData.append("username", email);
-    formData.append("password", password);
-    const res = await api.post("/auth/login", formData, {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
-    localStorage.setItem("token", res.data.access_token);
-    await refreshUser();
-  }, [refreshUser]);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const formData = new URLSearchParams();
+      formData.append("username", email);
+      formData.append("password", password);
+      const res = await api.post("/auth/login", formData, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+      localStorage.setItem("token", res.data.access_token);
+      await refreshUser();
+    },
+    [refreshUser],
+  );
 
-  const register = useCallback(async (email: string, password: string, fullName: string) => {
-    await api.post("/auth/register", { email, password, full_name: fullName });
-    await login(email, password);
-  }, [login]);
+  const register = useCallback(
+    async (email: string, password: string, fullName: string) => {
+      await api.post("/auth/register", {
+        email,
+        password,
+        full_name: fullName,
+      });
+      await login(email, password);
+    },
+    [login],
+  );
 
   const logout = useCallback(() => {
     localStorage.removeItem("token");

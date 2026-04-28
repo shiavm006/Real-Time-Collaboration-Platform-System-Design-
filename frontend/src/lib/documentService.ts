@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api } from "./api";
 
 export interface User {
   id: string;
@@ -25,19 +25,19 @@ export interface VersionInfo {
 
 export const authService = {
   getMe: async (): Promise<User> => {
-    const response = await api.get('/auth/me');
+    const response = await api.get("/auth/me");
     return response.data;
   },
 };
 
 export const documentService = {
   getDocuments: async (): Promise<DocumentInfo[]> => {
-    const response = await api.get('/documents/');
+    const response = await api.get("/documents/");
     return response.data;
   },
 
   createDocument: async (title: string): Promise<DocumentInfo> => {
-    const response = await api.post('/documents/', { title });
+    const response = await api.post("/documents/", { title });
     return response.data;
   },
 
@@ -59,11 +59,22 @@ export const documentService = {
     await api.post(`/documents/${docId}/versions/${versionId}/restore`);
   },
 
-  grantPermission: async (docId: string, userId: string, role: string): Promise<void> => {
-    await api.post(`/documents/${docId}/permissions`, { user_id: userId, role });
+  grantPermission: async (
+    docId: string,
+    userId: string,
+    role: string,
+  ): Promise<void> => {
+    await api.post(`/documents/${docId}/permissions`, {
+      user_id: userId,
+      role,
+    });
   },
 
-  grantPermissionByEmail: async (docId: string, email: string, role: string): Promise<void> => {
+  grantPermissionByEmail: async (
+    docId: string,
+    email: string,
+    role: string,
+  ): Promise<void> => {
     await api.post(`/documents/${docId}/permissions`, { email, role });
   },
 

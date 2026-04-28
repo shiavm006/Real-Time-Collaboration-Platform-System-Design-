@@ -10,7 +10,13 @@ interface EditorAreaProps {
   placeholder?: string;
 }
 
-export function EditorArea({ content, onChange, onCursorMove, disabled = false, placeholder }: EditorAreaProps) {
+export function EditorArea({
+  content,
+  onChange,
+  onCursorMove,
+  disabled = false,
+  placeholder,
+}: EditorAreaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastContentRef = useRef(content);
 
@@ -20,9 +26,9 @@ export function EditorArea({ content, onChange, onCursorMove, disabled = false, 
       const textarea = textareaRef.current;
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      
+
       lastContentRef.current = content;
-      
+
       requestAnimationFrame(() => {
         textarea.setSelectionRange(start, end);
       });
@@ -35,7 +41,7 @@ export function EditorArea({ content, onChange, onCursorMove, disabled = false, 
       onChange(e.target.value);
       if (onCursorMove) onCursorMove(e.target.selectionStart);
     },
-    [onChange, onCursorMove]
+    [onChange, onCursorMove],
   );
 
   const handleSelect = useCallback(
@@ -44,7 +50,7 @@ export function EditorArea({ content, onChange, onCursorMove, disabled = false, 
         onCursorMove((e.target as HTMLTextAreaElement).selectionStart);
       }
     },
-    [onCursorMove]
+    [onCursorMove],
   );
 
   return (

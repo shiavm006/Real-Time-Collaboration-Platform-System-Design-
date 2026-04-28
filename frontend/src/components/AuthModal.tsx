@@ -35,7 +35,9 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       onClose();
       resetForm();
     } catch (err: any) {
-      setError(err.response?.data?.detail || "An error occurred. Please try again.");
+      setError(
+        err.response?.data?.detail || "An error occurred. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -55,7 +57,16 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   const EyeIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       {showPassword ? (
         <>
           <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
@@ -76,13 +87,29 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       isOpen={isOpen}
       onClose={onClose}
       title={isLogin ? "Welcome back" : "Create an account"}
-      description={isLogin ? "Enter your details to access your documents." : "Sign up to start collaborating in real-time."}
+      description={
+        isLogin
+          ? "Enter your details to access your documents."
+          : "Sign up to start collaborating in real-time."
+      }
       maxWidth="max-w-sm"
     >
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/20 flex items-start gap-2">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger shrink-0 mt-0.5">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-danger shrink-0 mt-0.5"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           <p className="text-sm text-danger">{error}</p>
         </div>
