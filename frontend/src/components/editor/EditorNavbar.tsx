@@ -14,6 +14,7 @@ interface EditorNavbarProps {
   connectionState: ConnectionState;
   isSaving: boolean;
   onlineUsers: string[];
+  typingUsers: string[];
   onOpenVersionHistory: () => void;
   onOpenShare: () => void;
   onOpenComments: () => void;
@@ -85,23 +86,27 @@ function ConnectionBadge({ state, isSaving }: { state: ConnectionState; isSaving
   }
 }
 
-function PresenceAvatars({ userIds }: { userIds: string[] }) {
+function PresenceAvatars({ userIds, typingUsers }: { userIds: string[], typingUsers: string[] }) {
   const visible = userIds.slice(0, 4);
   const overflow = userIds.length - visible.length;
 
   return (
     <div className="flex items-center gap-2">
       <div className="flex -space-x-2">
-        {visible.map((uid, i) => (
-          <Tooltip key={uid} text={`User ${uid.slice(0, 6)}`}>
-            <Avatar
-              name={uid.slice(0, 6)}
-              userId={uid}
-              size="sm"
-              className="transition-transform hover:scale-110 hover:z-10"
-            />
-          </Tooltip>
-        ))}
+        {visible.map((uid, i) => {
+          const isTyping = typingUsers.includes(uid);
+          return (
+            <Tooltip key={uid} text={`User ${uid.slice(0, 6)} ${isTyping ? "(typing...)" : ""}`}>
+              <div className={`relative rounded-full transition-transform hover:scale-110 hover:z-10 ${isTyping ? "ring-2 ring-brand-500 ring-offset-1 ring-offset-surface" : ""}`}>
+                <Avatar
+                  name={uid.slice(0, 6)}
+                  userId={uid}
+                  size="sm"
+                />
+              </div>
+            </Tooltip>
+          );
+        })}
         {overflow > 0 && (
           <div className="w-6 h-6 rounded-full bg-surface-hover border-2 border-surface flex items-center justify-center text-[10px] font-semibold text-muted">
             +{overflow}
@@ -123,6 +128,7 @@ export function EditorNavbar({
   connectionState,
   isSaving,
   onlineUsers,
+  typingUsers,
   onOpenVersionHistory,
   onOpenShare,
   onOpenComments,
@@ -199,7 +205,7 @@ export function EditorNavbar({
 
         {/* Right: Presence + Actions */}
         <div className="flex items-center gap-3 shrink-0">
-          <PresenceAvatars userIds={onlineUsers} />
+          <PresenceAvatars userIds={onlineUsers} typingUsers={typingUsers} />
 
           <div className="h-5 w-px bg-border-color hidden sm:block" />
 

@@ -88,3 +88,8 @@ class AuthService:
             return None
         result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
+        result = await db.execute(select(User).where(User.email == email))
+        return result.scalar_one_or_none()

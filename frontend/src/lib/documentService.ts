@@ -55,7 +55,20 @@ export const documentService = {
     return response.data;
   },
 
+  restoreVersion: async (docId: string, versionId: string): Promise<void> => {
+    await api.post(`/documents/${docId}/versions/${versionId}/restore`);
+  },
+
   grantPermission: async (docId: string, userId: string, role: string): Promise<void> => {
     await api.post(`/documents/${docId}/permissions`, { user_id: userId, role });
+  },
+
+  grantPermissionByEmail: async (docId: string, email: string, role: string): Promise<void> => {
+    await api.post(`/documents/${docId}/permissions`, { email, role });
+  },
+
+  getPermissions: async (docId: string): Promise<any[]> => {
+    const response = await api.get(`/documents/${docId}/permissions`);
+    return response.data;
   },
 };

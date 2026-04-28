@@ -91,7 +91,17 @@ export function VersionHistoryPanel({ isOpen, onClose, documentId }: VersionHist
                       <p className="text-sm font-medium text-foreground">
                         Revision {version.revision}
                       </p>
-                      <Button variant="ghost" size="sm" onClick={() => {}}>
+                      <Button variant="ghost" size="sm" isLoading={loading} onClick={async () => {
+                        setLoading(true);
+                        try {
+                          await documentService.restoreVersion(documentId, version.id);
+                          onClose(); // Close panel on success, WebSocket will trigger reload
+                        } catch (e) {
+                          console.error("Failed to restore", e);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}>
                         Restore
                       </Button>
                     </div>

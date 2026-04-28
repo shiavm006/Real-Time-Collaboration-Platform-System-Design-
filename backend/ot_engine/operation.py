@@ -50,13 +50,14 @@ class InsertOperation(Operation):
 
 # Concrete class — Inheritance + Polymorphism
 class DeleteOperation(Operation):
-    def __init__(self, position: int, revision: int, user_id: str):
+    def __init__(self, position: int, revision: int, user_id: str, length: int = 1):
         super().__init__(position, revision, user_id)
+        self.length = length
 
     def apply(self, content: str) -> str:
         if self.position >= len(content):
             return content
-        return content[:self.position] + content[self.position + 1:]
+        return content[:self.position] + content[self.position + self.length:]
 
     def get_type(self) -> OperationType:
         return OperationType.DELETE
@@ -65,6 +66,7 @@ class DeleteOperation(Operation):
         return {
             "type": self.get_type().value,
             "position": self.position,
+            "length": self.length,
             "revision": self.revision,
             "user_id": self.user_id
         }
@@ -90,6 +92,6 @@ class OperationFactory:
         if op_type == OperationType.INSERT.value:
             return InsertOperation(position, data["char"], revision, user_id)
         elif op_type == OperationType.DELETE.value:
-            return DeleteOperation(position, revision, user_id)
+            return DeleteOperation(position, revision, user_id, data.get("length", 1))
         else:
             raise ValueError(f"Unknown operation type: {op_type}")

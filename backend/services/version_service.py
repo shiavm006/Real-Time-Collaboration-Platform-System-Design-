@@ -24,7 +24,6 @@ class VersionService:
             revision=doc.revision
         )
         db.add(version)
-        await db.commit()
 
     @staticmethod
     async def get_versions(db: AsyncSession, doc_id: uuid.UUID) -> list[Version]:

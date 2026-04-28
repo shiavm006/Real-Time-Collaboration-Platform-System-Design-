@@ -45,7 +45,6 @@ class DocumentService:
     async def update_content(db: AsyncSession, doc: Document, content: str, revision: int):
         doc.content = content
         doc.revision = revision
-        await db.commit()
 
     @staticmethod
     async def delete(db: AsyncSession, doc: Document):

@@ -11,6 +11,14 @@ import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { AuthModal } from "@/components/AuthModal";
+import { Avatar } from "@/components/ui/Avatar";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
+
+const LogoutIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+);
 
 const PlusIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -62,7 +70,7 @@ const EmptyDocIcon = () => (
 );
 
 export function Dashboard() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -168,9 +176,30 @@ export function Dashboard() {
             {loading ? "Loading..." : `${documents.length} document${documents.length !== 1 ? "s" : ""}`}
           </p>
         </div>
-        <Button variant="primary" icon={<PlusIcon />} onClick={openCreate}>
-          New Document
-        </Button>
+        <div className="flex items-center gap-4">
+          <Button variant="primary" icon={<PlusIcon />} onClick={openCreate}>
+            New Document
+          </Button>
+          
+          <div className="h-6 w-px bg-border-color" />
+          
+          {user && (
+            <DropdownMenu
+              trigger={
+                <button className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                  <Avatar name={user.full_name} userId={user.id} size="sm" />
+                  <span className="text-sm font-medium text-foreground hidden sm:block">
+                    {user.full_name}
+                  </span>
+                </button>
+              }
+              items={[
+                { label: user.email, onClick: () => {} },
+                { label: "Sign out", icon: <LogoutIcon />, onClick: logout, variant: "danger" },
+              ]}
+            />
+          )}
+        </div>
       </div>
 
       {/* Toolbar: Search + View toggle */}

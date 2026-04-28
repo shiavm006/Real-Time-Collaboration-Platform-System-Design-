@@ -26,6 +26,7 @@ export function Editor({ documentId }: { documentId: string }) {
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
   const [docLoading, setDocLoading] = useState(true);
 
@@ -38,11 +39,16 @@ export function Editor({ documentId }: { documentId: string }) {
 
   const wsRef = useRef<CollabWebSocket | null>(null);
   const contentRef = useRef(content);
+  const revisionRef = useRef(revision);
 
-  // Keep ref in sync
+  // Keep state in sync with refs for rendering
   useEffect(() => {
     contentRef.current = content;
   }, [content]);
+
+  useEffect(() => {
+    revisionRef.current = revision;
+  }, [revision]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -73,16 +79,35 @@ export function Editor({ documentId }: { documentId: string }) {
         ws.on("message", (msg: any) => {
           if (msg.type === "operation") {
             if (msg.user_id !== user.id) {
-              setContent((prev) => applyOperation(prev, msg.operation));
-              setRevision(msg.operation.revision + 1);
+              const newContent = applyOperation(contentRef.current, msg.operation);
+              contentRef.current = newContent;
+              revisionRef.current = msg.operation.revision;
+              
+              setContent(newContent);
+              setRevision(msg.operation.revision);
             }
           }
           if (msg.type === "init") {
+            contentRef.current = msg.content;
+            revisionRef.current = msg.revision;
             setContent(msg.content);
             setRevision(msg.revision);
           }
           if (msg.type === "presence") {
-            setOnlineUsers(msg.online_users || []);
+            setOnlineUsers(Array.from(new Set(msg.online_users as string[])) || []);
+          }
+          if (msg.type === "cursor") {
+            if (msg.user_id !== user.id) {
+              setTypingUsers((prev) => {
+                if (!prev.includes(msg.user_id)) return [...prev, msg.user_id];
+                return prev;
+              });
+              
+              // Remove typing indicator after 2 seconds of inactivity
+              setTimeout(() => {
+                setTypingUsers((prev) => prev.filter(id => id !== msg.user_id));
+              }, 2000);
+            }
           }
         });
 
@@ -104,19 +129,30 @@ export function Editor({ documentId }: { documentId: string }) {
   const handleContentChange = useCallback(
     (newText: string) => {
       if (!user) return;
-      const op = getOperationFromDiff(contentRef.current, newText, revision, user.id);
+      const op = getOperationFromDiff(contentRef.current, newText, revisionRef.current, user.id);
 
+      contentRef.current = newText;
       setContent(newText);
 
       if (op && wsRef.current) {
         setSaving(true);
         wsRef.current.send({ type: "operation", operation: op });
-        setRevision((r) => r + 1);
+        
+        const newRev = revisionRef.current + 1;
+        revisionRef.current = newRev;
+        setRevision(newRev);
+        
         setTimeout(() => setSaving(false), 600);
       }
     },
-    [revision, user]
+    [user]
   );
+
+  const handleCursorMove = useCallback((position: number) => {
+    if (wsRef.current && isAuthenticated) {
+      wsRef.current.send({ type: "cursor", position });
+    }
+  }, [isAuthenticated]);
 
   const handleDelete = async () => {
     try {
@@ -157,6 +193,7 @@ export function Editor({ documentId }: { documentId: string }) {
         connectionState={connectionState}
         isSaving={saving}
         onlineUsers={onlineUsers}
+        typingUsers={typingUsers}
         onOpenVersionHistory={() => setShowVersionHistory(true)}
         onOpenShare={() => setShowShare(true)}
         onOpenComments={() => setShowComments(true)}
@@ -169,6 +206,7 @@ export function Editor({ documentId }: { documentId: string }) {
       <EditorArea
         content={content}
         onChange={handleContentChange}
+        onCursorMove={handleCursorMove}
         disabled={!isAuthenticated}
         placeholder="Start writing your collaborative document here..."
       />

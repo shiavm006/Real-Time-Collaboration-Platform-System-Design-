@@ -41,6 +41,7 @@ class OTService:
             op_type=transformed_op.get_type().value,
             position=transformed_op.position,
             char=getattr(transformed_op, "char", None),
+            length=getattr(transformed_op, "length", 1),
             revision=transformed_op.revision
         )
         db.add(log)

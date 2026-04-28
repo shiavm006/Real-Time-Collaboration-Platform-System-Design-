@@ -4,9 +4,9 @@ export interface OperationPayload {
   type: OperationType;
   position: number;
   char?: string;
+  length?: number;
   revision: number;
-  user_id: string; // the backend uses JWT for this usually, but it expects it in payload or computes it. 
-  // Wait, backend's Operation parsing: data["position"], data["revision"], data["user_id"]
+  user_id: string; 
 }
 
 // Simple diffing for controlled <textarea> edits (1 char at a time usually)
@@ -29,7 +29,7 @@ export function getOperationFromDiff(oldText: string, newText: string, currentRe
     return {
       type: 'insert',
       position: start,
-      char: insertedChars[0] || ' ',
+      char: insertedChars,
       revision: currentRevision,
       user_id: userId
     };
@@ -39,6 +39,7 @@ export function getOperationFromDiff(oldText: string, newText: string, currentRe
     return {
       type: 'delete',
       position: start,
+      length: oldText.length - newText.length,
       revision: currentRevision,
       user_id: userId
     };
@@ -51,7 +52,8 @@ export function applyOperation(content: string, op: any): string {
     if (op.type === 'insert' && op.char !== undefined) {
         return content.slice(0, op.position) + op.char + content.slice(op.position);
     } else if (op.type === 'delete') {
-        return content.slice(0, op.position) + content.slice(op.position + 1);
+        const length = op.length || 1;
+        return content.slice(0, op.position) + content.slice(op.position + length);
     }
     return content;
 }

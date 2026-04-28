@@ -60,3 +60,13 @@ class PermissionService:
         if perm:
             await db.delete(perm)
             await db.commit()
+
+    @staticmethod
+    async def get_document_permissions(db: AsyncSession, doc_id: uuid.UUID) -> list[DocumentPermission]:
+        from sqlalchemy.orm import joinedload
+        result = await db.execute(
+            select(DocumentPermission)
+            .options(joinedload(DocumentPermission.user))
+            .where(DocumentPermission.document_id == doc_id)
+        )
+        return list(result.scalars().all())

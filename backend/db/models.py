@@ -67,7 +67,8 @@ class OperationLog(Base):
     user_id     : Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     op_type     : Mapped[str]       = mapped_column(String(10), nullable=False)
     position    : Mapped[int]       = mapped_column(Integer, nullable=False)
-    char        : Mapped[str]       = mapped_column(String(1), nullable=True)
+    char        : Mapped[str]       = mapped_column(String(255), nullable=True)
+    length      : Mapped[int]       = mapped_column(Integer, nullable=True, default=1)
     revision    : Mapped[int]       = mapped_column(Integer, nullable=False)
     created_at  : Mapped[datetime]  = mapped_column(DateTime, default=datetime.utcnow)
 

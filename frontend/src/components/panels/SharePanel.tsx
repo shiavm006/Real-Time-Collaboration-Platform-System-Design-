@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { documentService } from "@/lib/documentService";
 
 interface SharePanelProps {
   isOpen: boolean;
@@ -32,6 +33,38 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [permissions, setPermissions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isOpen && documentId) {
+      loadPermissions();
+    }
+  }, [isOpen, documentId]);
+
+  const loadPermissions = async () => {
+    try {
+      const perms = await documentService.getPermissions(documentId);
+      setPermissions(perms);
+    } catch (e) {
+      console.error("Failed to load permissions", e);
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!email) return;
+    setLoading(true);
+    try {
+      await documentService.grantPermissionByEmail(documentId, email, role);
+      setEmail("");
+      loadPermissions(); // Refresh the list
+    } catch (e) {
+      console.error("Failed to grant permission", e);
+      alert("Failed to grant permission. User might not exist.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -78,9 +111,7 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
                 <option value="viewer">Viewer</option>
               </select>
             </div>
-            <Button variant="primary" size="sm" className="mt-3 w-full" onClick={() => {
-              setEmail("");
-            }}>
+            <Button variant="primary" size="sm" className="mt-3 w-full" isLoading={loading} onClick={handleInvite}>
               Send invite
             </Button>
           </div>
@@ -106,11 +137,27 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
             </div>
           </div>
 
-          {/* People with access (placeholder) */}
+          {/* People with access */}
           <div>
             <h4 className="text-sm font-medium text-foreground mb-3">People with access</h4>
-            <div className="text-xs text-muted py-4 text-center bg-surface-hover rounded-lg">
-              Only you have access to this document
+            <div className="space-y-3">
+              {permissions.length === 0 ? (
+                <div className="text-xs text-muted py-4 text-center bg-surface-hover rounded-lg">
+                  Only you have access to this document
+                </div>
+              ) : (
+                permissions.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between bg-surface-hover p-3 rounded-lg border border-border-color">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{p.full_name}</p>
+                      <p className="text-xs text-muted truncate">{p.email}</p>
+                    </div>
+                    <span className="text-xs font-medium px-2 py-1 bg-surface border border-border-color rounded text-muted capitalize">
+                      {p.role}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

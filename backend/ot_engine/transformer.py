@@ -46,7 +46,7 @@ class Transformer:
         """
         if op1.position < op2.position:
             # op1 pushed everything right, so op2 must move right too
-            return InsertOperation(op2.position + 1, op2.char, op2.revision, op2.user_id)
+            return InsertOperation(op2.position + len(op1.char), op2.char, op2.revision, op2.user_id)
 
         elif op1.position > op2.position:
             # op1 is to the right, op2 position unaffected
@@ -55,7 +55,7 @@ class Transformer:
         else:
             # Same position — use user_id as tie-breaker for determinism
             if op1.user_id <= op2.user_id:
-                return InsertOperation(op2.position + 1, op2.char, op2.revision, op2.user_id)
+                return InsertOperation(op2.position + len(op1.char), op2.char, op2.revision, op2.user_id)
             else:
                 return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
 
@@ -71,7 +71,7 @@ class Transformer:
                 → op2's position stays the same
         """
         if op1.position <= op2.position:
-            return DeleteOperation(op2.position + 1, op2.revision, op2.user_id)
+            return DeleteOperation(op2.position + len(op1.char), op2.revision, op2.user_id)
         else:
             return DeleteOperation(op2.position, op2.revision, op2.user_id)
 
@@ -87,7 +87,7 @@ class Transformer:
                 → op2's position stays the same
         """
         if op1.position < op2.position:
-            return InsertOperation(op2.position - 1, op2.char, op2.revision, op2.user_id)
+            return InsertOperation(op2.position - op1.length, op2.char, op2.revision, op2.user_id)
         else:
             return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
 
@@ -106,10 +106,10 @@ class Transformer:
                 → op2 becomes a no-op (nothing left to delete)
         """
         if op1.position < op2.position:
-            return DeleteOperation(op2.position - 1, op2.revision, op2.user_id)
+            return DeleteOperation(op2.position - op1.length, op2.revision, op2.user_id, op2.length)
 
         elif op1.position > op2.position:
-            return DeleteOperation(op2.position, op2.revision, op2.user_id)
+            return DeleteOperation(op2.position, op2.revision, op2.user_id, op2.length)
 
         else:
             # Same character deleted by both — return no-op delete at safe position
