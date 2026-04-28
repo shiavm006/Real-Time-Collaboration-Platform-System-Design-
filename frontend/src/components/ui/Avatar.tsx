@@ -21,7 +21,13 @@ function getGrayScaleFromId(id: string): string {
   for (let i = 0; i < id.length; i++) {
     hash = id.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const shades = ["bg-brand-900", "bg-brand-800", "bg-brand-700", "bg-brand-600", "bg-foreground"];
+  const shades = [
+    "bg-brand-900",
+    "bg-brand-800",
+    "bg-brand-700",
+    "bg-brand-600",
+    "bg-foreground",
+  ];
   return shades[Math.abs(hash) % shades.length];
 }
 
@@ -33,7 +39,12 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-export function Avatar({ name, userId, size = "md", className = "" }: AvatarProps) {
+export function Avatar({
+  name,
+  userId,
+  size = "md",
+  className = "",
+}: AvatarProps) {
   const bgColor = userId ? getGrayScaleFromId(userId) : "bg-brand-900";
   const initials = getInitials(name);
 

@@ -45,7 +45,7 @@ class Document:
         We need to transform the operation against all ops from N to M.
         """
         # Find all ops the client hasn't seen yet
-        concurrent_ops = self._history[operation.revision:]
+        concurrent_ops = self._history[operation.revision :]
 
         transformed = operation
         for historical_op in concurrent_ops:
@@ -58,7 +58,7 @@ class Document:
         return {
             "doc_id": self.doc_id,
             "content": self.content,
-            "revision": self.revision
+            "revision": self.revision,
         }
 
     def get_history(self) -> list[dict]:

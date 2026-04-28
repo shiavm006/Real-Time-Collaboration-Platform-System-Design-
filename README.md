@@ -42,6 +42,11 @@ When a user types a letter, the `OT Facade` calculates the index offsets to prev
 
 ![Network Sequence Diagram](presentation_diagrams/05_Sequence_Diagram.png)
 
+### 4. Horizontal Scaling & Persistence (Redis)
+To prevent the application from crashing under heavy load, WebSockets are horizontally scaled across multiple Uvicorn worker nodes. These nodes stay perfectly synchronized by publishing and subscribing to a document-specific Redis channel (`doc_channel:{UUID}`).
+
+![Redis Architecture](presentation_diagrams/Redis%20Architencture%20and%20Data%20strategy.png)
+
 ---
 
 ## 🧮 Software Engineering Principles
@@ -83,30 +88,35 @@ Every keystroke is permanently vaulted in persistent Postgres logs, granting the
 
 To test this architecture locally, ensure you have **Docker Desktop**, **Node 18+**, and **Python 3.11+**.
 
-### 1. Boot Containerized Pipeline
+### ⚡ One-Click Startup (Recommended)
+For evaluators and examiners, we have provided an automated startup script that boots the entire infrastructure, runs migrations, and launches both the frontend and backend servers.
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+### Manual Startup
+If you prefer to start the services individually:
+
+**1. Boot Containerized Pipeline**
 ```bash
 docker-compose up -d
 ```
-*(Deploys active persistent instances of PostgreSQL on `5432` and Redis on `6379`)*
 
-### 2. Ignite FastAPI Backend
+**2. Ignite FastAPI Backend**
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-
-# Generate schema migrations into your local container
 alembic upgrade head
-
-# Boot API server
 uvicorn main:app --reload --port 8000
 ```
-Interactive Swagger API docs available at [`http://localhost:8000/docs`](http://localhost:8000/docs)
+Interactive API docs available at [`http://localhost:8000/docs`](http://localhost:8000/docs)
 
-### 3. Surface Next.js Frontend
-Open a dedicated terminal window:
+**3. Surface Next.js Frontend**
 ```bash
 cd frontend
 npm install

@@ -11,18 +11,42 @@ interface VersionHistoryPanelProps {
 }
 
 const CloseIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
 
 const ClockIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
   </svg>
 );
 
-export function VersionHistoryPanel({ isOpen, onClose, documentId }: VersionHistoryPanelProps) {
+export function VersionHistoryPanel({
+  isOpen,
+  onClose,
+  documentId,
+}: VersionHistoryPanelProps) {
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -67,8 +91,12 @@ export function VersionHistoryPanel({ isOpen, onClose, documentId }: VersionHist
               <div className="w-12 h-12 rounded flex items-center justify-center text-foreground mb-4 border border-border-color bg-surface">
                 <ClockIcon />
               </div>
-              <p className="text-sm font-medium text-foreground mb-1">No versions yet</p>
-              <p className="text-xs text-muted">Versions are created automatically as you edit.</p>
+              <p className="text-sm font-medium text-foreground mb-1">
+                No versions yet
+              </p>
+              <p className="text-xs text-muted">
+                Versions are created automatically as you edit.
+              </p>
             </div>
           ) : (
             <div className="px-3">
@@ -79,7 +107,9 @@ export function VersionHistoryPanel({ isOpen, onClose, documentId }: VersionHist
                 >
                   {/* Timeline */}
                   <div className="flex flex-col items-center shrink-0">
-                    <div className={`w-2.5 h-2.5 rounded-full border-2 ${i === 0 ? "bg-foreground border-foreground" : "bg-surface border-border-hover"}`} />
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full border-2 ${i === 0 ? "bg-foreground border-foreground" : "bg-surface border-border-hover"}`}
+                    />
                     {i < versions.length - 1 && (
                       <div className="w-px flex-1 bg-border-color mt-1" />
                     )}
@@ -91,7 +121,25 @@ export function VersionHistoryPanel({ isOpen, onClose, documentId }: VersionHist
                       <p className="text-sm font-medium text-foreground">
                         Revision {version.revision}
                       </p>
-                      <Button variant="ghost" size="sm" onClick={() => {}}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        isLoading={loading}
+                        onClick={async () => {
+                          setLoading(true);
+                          try {
+                            await documentService.restoreVersion(
+                              documentId,
+                              version.id,
+                            );
+                            onClose(); // Close panel on success, WebSocket will trigger reload
+                          } catch (e) {
+                            console.error("Failed to restore", e);
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                      >
                         Restore
                       </Button>
                     </div>
@@ -99,7 +147,8 @@ export function VersionHistoryPanel({ isOpen, onClose, documentId }: VersionHist
                       {new Date(version.created_at).toLocaleString()}
                     </p>
                     <p className="text-xs text-muted/60 mt-1 truncate">
-                      {version.snapshot.slice(0, 80)}{version.snapshot.length > 80 ? "…" : ""}
+                      {version.snapshot.slice(0, 80)}
+                      {version.snapshot.length > 80 ? "…" : ""}
                     </p>
                   </div>
                 </div>
