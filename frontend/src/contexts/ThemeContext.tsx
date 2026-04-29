@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
 
 type Theme = "light" | "dark" | "system";
 
@@ -14,7 +21,9 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -27,11 +36,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle("dark", resolved === "dark");
   }, []);
 
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    localStorage.setItem("collabdoc-theme", t);
-    applyTheme(t);
-  }, [applyTheme]);
+  const setTheme = useCallback(
+    (t: Theme) => {
+      setThemeState(t);
+      localStorage.setItem("collabdoc-theme", t);
+      applyTheme(t);
+    },
+    [applyTheme],
+  );
 
   useEffect(() => {
     const stored = localStorage.getItem("collabdoc-theme") as Theme | null;

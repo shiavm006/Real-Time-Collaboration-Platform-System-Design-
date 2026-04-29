@@ -2,9 +2,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
+
 class OperationType(Enum):
     INSERT = "insert"
     DELETE = "delete"
+
 
 # Abstract base class — Abstraction + OOP
 class Operation(ABC):
@@ -33,7 +35,7 @@ class InsertOperation(Operation):
         self.char = char
 
     def apply(self, content: str) -> str:
-        return content[:self.position] + self.char + content[self.position:]
+        return content[: self.position] + self.char + content[self.position :]
 
     def get_type(self) -> OperationType:
         return OperationType.INSERT
@@ -44,19 +46,20 @@ class InsertOperation(Operation):
             "position": self.position,
             "char": self.char,
             "revision": self.revision,
-            "user_id": self.user_id
+            "user_id": self.user_id,
         }
 
 
 # Concrete class — Inheritance + Polymorphism
 class DeleteOperation(Operation):
-    def __init__(self, position: int, revision: int, user_id: str):
+    def __init__(self, position: int, revision: int, user_id: str, length: int = 1):
         super().__init__(position, revision, user_id)
+        self.length = length
 
     def apply(self, content: str) -> str:
         if self.position >= len(content):
             return content
-        return content[:self.position] + content[self.position + 1:]
+        return content[: self.position] + content[self.position + self.length :]
 
     def get_type(self) -> OperationType:
         return OperationType.DELETE
@@ -65,8 +68,9 @@ class DeleteOperation(Operation):
         return {
             "type": self.get_type().value,
             "position": self.position,
+            "length": self.length,
             "revision": self.revision,
-            "user_id": self.user_id
+            "user_id": self.user_id,
         }
 
 
@@ -75,11 +79,12 @@ class OperationFactory:
     """
     FACTORY METHOD PATTERN
     ----------------------
-    The OperationFactory abstracts the creation logic of different Operational 
-    Transformation types (Insert, Delete). This elegantly allows the engine 
-    to dynamically generate subclasses from incoming JSON payloads without 
+    The OperationFactory abstracts the creation logic of different Operational
+    Transformation types (Insert, Delete). This elegantly allows the engine
+    to dynamically generate subclasses from incoming JSON payloads without
     tying high-level modules to concrete struct implementations.
     """
+
     @staticmethod
     def create(data: dict) -> Operation:
         op_type = data.get("type")
@@ -90,6 +95,6 @@ class OperationFactory:
         if op_type == OperationType.INSERT.value:
             return InsertOperation(position, data["char"], revision, user_id)
         elif op_type == OperationType.DELETE.value:
-            return DeleteOperation(position, revision, user_id)
+            return DeleteOperation(position, revision, user_id, data.get("length", 1))
         else:
             raise ValueError(f"Unknown operation type: {op_type}")

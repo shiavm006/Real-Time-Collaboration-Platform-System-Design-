@@ -21,10 +21,9 @@ class VersionService:
             document_id=doc.id,
             created_by=user.id,
             snapshot=doc.content,
-            revision=doc.revision
+            revision=doc.revision,
         )
         db.add(version)
-        await db.commit()
 
     @staticmethod
     async def get_versions(db: AsyncSession, doc_id: uuid.UUID) -> list[Version]:

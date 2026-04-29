@@ -31,7 +31,9 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login")
-async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def login(
+    form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
+):
     try:
         return await AuthService.login(db, form.username, form.password)
     except ValueError as e:
