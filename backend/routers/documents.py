@@ -24,6 +24,21 @@ class DocumentResponse(BaseModel):
     content: str
     revision: int
     owner_id: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    role: str | None = None
+
+
+class DocumentSummaryResponse(BaseModel):
+    """Lightweight DTO for list views — omits content to keep payloads small."""
+
+    id: str
+    title: str
+    revision: int
+    owner_id: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    role: str | None = None
 
 
 class GrantPermissionRequest(BaseModel):
@@ -54,23 +69,29 @@ async def create_document(
         content=doc.content,
         revision=doc.revision,
         owner_id=str(doc.owner_id),
+        created_at=doc.created_at.isoformat() if doc.created_at else None,
+        updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
+        role="owner",
     )
 
 
-@router.get("/", response_model=list[DocumentResponse])
+@router.get("/", response_model=list[DocumentSummaryResponse])
 async def list_documents(
     user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    docs = await DocumentService.get_user_documents(db, user)
+    """Returns user's docs without full content — keeps the dashboard payload small."""
+    docs_with_role = await DocumentService.get_user_documents_with_role(db, user)
     return [
-        DocumentResponse(
+        DocumentSummaryResponse(
             id=str(d.id),
             title=d.title,
-            content=d.content,
             revision=d.revision,
             owner_id=str(d.owner_id),
+            created_at=d.created_at.isoformat() if d.created_at else None,
+            updated_at=d.updated_at.isoformat() if d.updated_at else None,
+            role=role.value if role else None,
         )
-        for d in docs
+        for d, role in docs_with_role
     ]
 
 
@@ -81,7 +102,8 @@ async def get_document(
     doc = await DocumentService.get(db, uuid.UUID(doc_id))
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    if not await PermissionService.can_view(db, doc.id, user.id):
+    role = await PermissionService.get_role(db, doc.id, user.id)
+    if role is None:
         raise HTTPException(status_code=403, detail="Access denied")
     return DocumentResponse(
         id=str(doc.id),
@@ -89,6 +111,9 @@ async def get_document(
         content=doc.content,
         revision=doc.revision,
         owner_id=str(doc.owner_id),
+        created_at=doc.created_at.isoformat() if doc.created_at else None,
+        updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
+        role=role.value,
     )
 
 

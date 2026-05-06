@@ -34,7 +34,21 @@ export class CollabWebSocket {
   }
 
   connect() {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+    // Don't allocate a second socket if one is already open OR mid-handshake.
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    // If we're between attempts, cancel the pending reconnect so we don't
+    // open two sockets back-to-back.
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     this.intentionalClose = false;
     this.setState("connecting");

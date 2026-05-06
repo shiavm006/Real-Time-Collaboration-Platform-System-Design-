@@ -56,6 +56,7 @@ class ConnectionManager:
         revision: int,
         title: str = "",
         owner_id: str = "",
+        role: str = "viewer",
     ) -> str:
         """Accepts connection, yields unique connection_id, starts pubsub if needed."""
         await websocket.accept()
@@ -83,6 +84,7 @@ class ConnectionManager:
                     "revision": self._documents[doc_id].revision,
                     "title": title,
                     "owner_id": owner_id,
+                    "role": role,
                 }
             )
         )
@@ -221,7 +223,8 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
             await websocket.close(code=1008)
             return
 
-        if not await PermissionService.can_view(db, doc_uuid, user.id):
+        user_role = await PermissionService.get_role(db, doc_uuid, user.id)
+        if user_role is None:
             await websocket.close(code=1008)
             return
 
@@ -239,6 +242,7 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
             db_doc.revision,
             db_doc.title,
             str(db_doc.owner_id),
+            user_role.value,
         )
 
     try:

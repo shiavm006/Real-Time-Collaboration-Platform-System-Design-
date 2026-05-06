@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { documentService, type DocumentInfo } from "@/lib/documentService";
+import { documentService, type DocumentSummary } from "@/lib/documentService";
 import { Avatar } from "@/components/ui/Avatar";
 import { SkeletonSidebar } from "@/components/ui/Skeleton";
 
@@ -122,7 +122,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
-  const [documents, setDocuments] = useState<DocumentInfo[]>([]);
+  const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 

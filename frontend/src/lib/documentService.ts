@@ -14,6 +14,18 @@ export interface DocumentInfo {
   owner_id: string;
   created_at?: string;
   updated_at?: string;
+  role?: "owner" | "editor" | "viewer";
+}
+
+/** Lightweight version returned by the list endpoint — no `content` field. */
+export interface DocumentSummary {
+  id: string;
+  title: string;
+  revision: number;
+  owner_id: string;
+  created_at?: string;
+  updated_at?: string;
+  role?: "owner" | "editor" | "viewer";
 }
 
 export interface VersionInfo {
@@ -31,7 +43,7 @@ export const authService = {
 };
 
 export const documentService = {
-  getDocuments: async (): Promise<DocumentInfo[]> => {
+  getDocuments: async (): Promise<DocumentSummary[]> => {
     const response = await api.get("/documents/");
     return response.data;
   },

@@ -40,6 +40,19 @@ class DocumentService:
         return list(result.scalars().all())
 
     @staticmethod
+    async def get_user_documents_with_role(
+        db: AsyncSession, user: User
+    ) -> list[tuple[Document, RoleEnum]]:
+        """Single query returning (Document, role) pairs — saves an N+1 in the list endpoint."""
+        result = await db.execute(
+            select(Document, DocumentPermission.role)
+            .join(DocumentPermission, DocumentPermission.document_id == Document.id)
+            .where(DocumentPermission.user_id == user.id)
+            .order_by(Document.updated_at.desc())
+        )
+        return [(row[0], row[1]) for row in result.all()]
+
+    @staticmethod
     async def update_content(
         db: AsyncSession, doc: Document, content: str, revision: int
     ):

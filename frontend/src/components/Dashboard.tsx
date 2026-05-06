@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { documentService, type DocumentInfo } from "@/lib/documentService";
+import { documentService, type DocumentSummary } from "@/lib/documentService";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
@@ -155,7 +155,7 @@ const EmptyDocIcon = () => (
 
 export function Dashboard() {
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
-  const [documents, setDocuments] = useState<DocumentInfo[]>([]);
+  const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -167,7 +167,7 @@ export function Dashboard() {
   const [isCreating, setIsCreating] = useState(false);
 
   // Delete modal
-  const [deleteDoc, setDeleteDoc] = useState<DocumentInfo | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<DocumentSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const router = useRouter();

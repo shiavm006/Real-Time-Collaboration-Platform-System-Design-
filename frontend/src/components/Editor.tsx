@@ -68,6 +68,8 @@ export function Editor({ documentId }: { documentId: string }) {
     useState<ConnectionState>("disconnected");
   const [docLoading, setDocLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
+  const canEdit = role === "owner" || role === "editor";
 
   // Panel states
   const [showVersionHistory, setShowVersionHistory] = useState(false);
@@ -94,6 +96,7 @@ export function Editor({ documentId }: { documentId: string }) {
     null,
   );
   const cursorPendingPosRef = useRef(0);
+  const canEditRef = useRef(true);
 
   // One typing timer per user — reset, don't stack.
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -103,6 +106,10 @@ export function Editor({ documentId }: { documentId: string }) {
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  useEffect(() => {
+    canEditRef.current = canEdit;
+  }, [canEdit]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -139,6 +146,13 @@ export function Editor({ documentId }: { documentId: string }) {
         setContent(next);
         setRevision(nextRev);
         if (typeof msg.title === "string" && msg.title) setTitle(msg.title);
+        if (
+          msg.role === "owner" ||
+          msg.role === "editor" ||
+          msg.role === "viewer"
+        ) {
+          setRole(msg.role);
+        }
         if (!initReceivedRef.current) {
           initReceivedRef.current = true;
           setDocLoading(false);
@@ -161,8 +175,10 @@ export function Editor({ documentId }: { documentId: string }) {
 
       if (msg.type === "operation") {
         const op = msg.operation as RemoteOperation;
-        const me = userRef.current;
-        if (me && msg.user_id === me.id) return;
+        // Don't filter by user_id — the server already excludes the
+        // originating connection via exclude_conn_id. If the same user has
+        // another tab open, that tab IS a different connection and must
+        // apply the op or its content drifts away from the server's.
 
         const ta = textareaRef.current;
         if (ta) {
@@ -258,6 +274,10 @@ export function Editor({ documentId }: { documentId: string }) {
     const me = userRef.current;
     const ws = wsRef.current;
     if (!me) return;
+    // Viewers shouldn't reach here (textarea is disabled) — but if they do
+    // (programmatic value-set, browser quirk), drop the change instead of
+    // diverging from the server state.
+    if (canEditRef.current === false) return;
 
     const oldText = contentRef.current;
     if (oldText === newText) return;
@@ -391,8 +411,12 @@ export function Editor({ documentId }: { documentId: string }) {
         content={content}
         onChange={handleContentChange}
         onCursorMove={handleCursorMove}
-        disabled={!isAuthenticated}
-        placeholder="Start writing your collaborative document here..."
+        disabled={!isAuthenticated || !canEdit}
+        placeholder={
+          canEdit
+            ? "Start writing your collaborative document here..."
+            : "You have view-only access to this document."
+        }
       />
 
       {/* Panels — chunks load on first open */}
