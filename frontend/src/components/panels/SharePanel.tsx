@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { documentService } from "@/lib/documentService";
+import {
+  documentService,
+  type PermissionEntry,
+} from "@/lib/documentService";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SharePanelProps {
   isOpen: boolean;
@@ -58,40 +62,106 @@ const CheckIcon = () => (
   </svg>
 );
 
+const TrashIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+  </svg>
+);
+
+function extractError(e: unknown, fallback: string): string {
+  const err = e as { response?: { data?: { detail?: string } }; message?: string };
+  return err?.response?.data?.detail ?? err?.message ?? fallback;
+}
+
 export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
+  const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [permissions, setPermissions] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<PermissionEntry[]>([]);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen && documentId) {
-      loadPermissions();
-    }
-  }, [isOpen, documentId]);
-
-  const loadPermissions = async () => {
+  const loadPermissions = useCallback(async () => {
     try {
       const perms = await documentService.getPermissions(documentId);
       setPermissions(perms);
     } catch (e) {
       console.error("Failed to load permissions", e);
+      setError(extractError(e, "Failed to load permissions"));
+    }
+  }, [documentId]);
+
+  useEffect(() => {
+    if (isOpen && documentId) {
+      setError(null);
+      setInfo(null);
+      loadPermissions();
+    }
+  }, [isOpen, documentId, loadPermissions]);
+
+  const handleInvite = async () => {
+    if (!email.trim()) return;
+    setLoading(true);
+    setError(null);
+    setInfo(null);
+    try {
+      await documentService.grantPermissionByEmail(
+        documentId,
+        email.trim(),
+        role,
+      );
+      setEmail("");
+      setInfo(`Invited ${email.trim()} as ${role}`);
+      await loadPermissions();
+    } catch (e) {
+      setError(extractError(e, "Failed to invite user"));
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleInvite = async () => {
-    if (!email) return;
-    setLoading(true);
+  const handleRoleChange = async (userId: string, nextRole: string) => {
+    setError(null);
+    setInfo(null);
+    setPendingUserId(userId);
     try {
-      await documentService.grantPermissionByEmail(documentId, email, role);
-      setEmail("");
-      loadPermissions(); // Refresh the list
+      await documentService.updateRole(documentId, userId, nextRole);
+      await loadPermissions();
     } catch (e) {
-      console.error("Failed to grant permission", e);
-      alert("Failed to grant permission. User might not exist.");
+      setError(extractError(e, "Failed to update role"));
     } finally {
-      setLoading(false);
+      setPendingUserId(null);
+    }
+  };
+
+  const handleRevoke = async (userId: string, label: string) => {
+    if (!confirm(`Remove access for ${label}?`)) return;
+    setError(null);
+    setInfo(null);
+    setPendingUserId(userId);
+    try {
+      await documentService.revokePermission(documentId, userId);
+      setInfo(`Removed access for ${label}`);
+      await loadPermissions();
+    } catch (e) {
+      setError(extractError(e, "Failed to remove access"));
+    } finally {
+      setPendingUserId(null);
     }
   };
 
@@ -104,6 +174,19 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // Sort: owner first, then alphabetically by name
+  const sortedPerms = [...permissions].sort((a, b) => {
+    if (a.role === "owner" && b.role !== "owner") return -1;
+    if (b.role === "owner" && a.role !== "owner") return 1;
+    return a.full_name.localeCompare(b.full_name);
+  });
+
+  const isCurrentUser = (uid: string) => user?.id === uid;
+  const ownerCount = sortedPerms.filter((p) => p.role === "owner").length;
+  // Owner shouldn't be able to manage their own row.
+  const canManage = (p: PermissionEntry) =>
+    p.role !== "owner" && !isCurrentUser(p.user_id);
 
   return (
     <>
@@ -122,6 +205,18 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {/* Banner: error / info */}
+          {error && (
+            <div className="px-3 py-2 text-xs rounded-md bg-red-50 border border-red-200 text-red-700">
+              {error}
+            </div>
+          )}
+          {info && !error && (
+            <div className="px-3 py-2 text-xs rounded-md bg-green-50 border border-green-200 text-green-700">
+              {info}
+            </div>
+          )}
+
           {/* Add people */}
           <div>
             <h4 className="text-sm font-medium text-foreground mb-3">
@@ -130,9 +225,12 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
             <div className="flex gap-2">
               <div className="flex-1">
                 <Input
-                  placeholder="Enter email address"
+                  placeholder="email@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleInvite();
+                  }}
                 />
               </div>
               <select
@@ -153,6 +251,10 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
             >
               Send invite
             </Button>
+            <p className="mt-2 text-[11px] text-muted leading-relaxed">
+              The recipient must already have an account. They&apos;ll see this
+              document in their dashboard the next time they refresh.
+            </p>
           </div>
 
           {/* Divider */}
@@ -178,6 +280,9 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
                 {copied ? "Copied" : "Copy"}
               </Button>
             </div>
+            <p className="mt-2 text-[11px] text-muted leading-relaxed">
+              Only people you&apos;ve invited will be able to open this link.
+            </p>
           </div>
 
           {/* People with access */}
@@ -185,30 +290,81 @@ export function SharePanel({ isOpen, onClose, documentId }: SharePanelProps) {
             <h4 className="text-sm font-medium text-foreground mb-3">
               People with access
             </h4>
-            <div className="space-y-3">
-              {permissions.length === 0 ? (
+            <div className="space-y-2">
+              {sortedPerms.length === 0 ? (
                 <div className="text-xs text-muted py-4 text-center bg-surface-hover rounded-lg">
-                  Only you have access to this document
+                  Loading…
                 </div>
               ) : (
-                permissions.map((p, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between bg-surface-hover p-3 rounded-lg border border-border-color"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {p.full_name}
-                      </p>
-                      <p className="text-xs text-muted truncate">{p.email}</p>
+                sortedPerms.map((p) => {
+                  const isMe = isCurrentUser(p.user_id);
+                  const manageable = canManage(p);
+                  const busy = pendingUserId === p.user_id;
+                  return (
+                    <div
+                      key={p.user_id}
+                      className="flex items-center justify-between bg-surface-hover p-3 rounded-lg border border-border-color"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {p.full_name}
+                          {isMe && (
+                            <span className="ml-1 text-muted font-normal">
+                              (you)
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted truncate">{p.email}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {p.role === "owner" ? (
+                          <span className="text-xs font-medium px-2 py-1 bg-surface border border-border-color rounded text-muted capitalize">
+                            owner
+                          </span>
+                        ) : manageable ? (
+                          <select
+                            value={p.role}
+                            disabled={busy}
+                            onChange={(e) =>
+                              handleRoleChange(p.user_id, e.target.value)
+                            }
+                            className="text-xs px-2 py-1 bg-surface border border-border-color rounded text-foreground focus:outline-none focus:ring-1 focus:ring-foreground disabled:opacity-50"
+                          >
+                            <option value="editor">Editor</option>
+                            <option value="viewer">Viewer</option>
+                          </select>
+                        ) : (
+                          <span className="text-xs font-medium px-2 py-1 bg-surface border border-border-color rounded text-muted capitalize">
+                            {p.role}
+                          </span>
+                        )}
+
+                        {manageable && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              handleRevoke(p.user_id, p.full_name || p.email)
+                            }
+                            title="Remove access"
+                            className="p-1.5 rounded-md text-muted hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <TrashIcon />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-xs font-medium px-2 py-1 bg-surface border border-border-color rounded text-muted capitalize">
-                      {p.role}
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
+            {ownerCount > 1 && (
+              <p className="mt-2 text-[11px] text-amber-600">
+                Multiple owner rows detected — this is a legacy data state. New
+                grants enforce a single owner.
+              </p>
+            )}
           </div>
         </div>
       </div>

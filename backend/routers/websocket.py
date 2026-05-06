@@ -100,17 +100,40 @@ class ConnectionManager:
         """Asynchronous background daemon waiting for cross-server Redis payloads."""
         try:
             async for message in pubsub.listen():
-                if message["type"] == "message":
-                    payload = json.loads(message["data"])
-                    exclude_conn_id = payload.get("_exclude_conn_id")
+                if message["type"] != "message":
+                    continue
+                payload = json.loads(message["data"])
 
-                    # Fanout to local sockets
-                    for ws, _uid, cid, _name in self._rooms.get(doc_id, []):
-                        if cid != exclude_conn_id:
-                            try:
-                                await ws.send_text(message["data"])
-                            except Exception:
-                                pass
+                # Internal kick signal — close every local socket of the named user.
+                if payload.get("type") == "_kick":
+                    target_uid = payload.get("user_id")
+                    reason = payload.get("reason", "permission_revoked")
+                    targets = [
+                        (ws, cid)
+                        for ws, uid, cid, _ in self._rooms.get(doc_id, [])
+                        if uid == target_uid
+                    ]
+                    for ws, _cid in targets:
+                        try:
+                            await ws.send_text(
+                                json.dumps({"type": "kicked", "reason": reason})
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            await ws.close(code=1008)
+                        except Exception:
+                            pass
+                    continue
+
+                exclude_conn_id = payload.get("_exclude_conn_id")
+                # Fanout to local sockets
+                for ws, _uid, cid, _name in self._rooms.get(doc_id, []):
+                    if cid != exclude_conn_id:
+                        try:
+                            await ws.send_text(message["data"])
+                        except Exception:
+                            pass
         except asyncio.CancelledError:
             await pubsub.unsubscribe(f"doc_channel:{doc_id}")
 
@@ -135,6 +158,35 @@ class ConnectionManager:
         if exclude_conn_id:
             message["_exclude_conn_id"] = exclude_conn_id
         await self.redis.publish(f"doc_channel:{doc_id}", json.dumps(message))
+
+    async def kick_user(self, doc_id: str, user_id: str, reason: str = "permission_revoked"):
+        """
+        Send a `kicked` message and forcibly close every connection for the
+        given user in this room (on this server). Cross-server kicks ride on
+        the broadcast channel — every node filters by user_id and closes its
+        local sockets.
+        """
+        # Local: close immediately so the kicked user gets the message synchronously.
+        targets = [
+            (ws, cid)
+            for ws, uid, cid, _ in self._rooms.get(doc_id, [])
+            if uid == user_id
+        ]
+        for ws, _cid in targets:
+            try:
+                await ws.send_text(json.dumps({"type": "kicked", "reason": reason}))
+            except Exception:
+                pass
+            try:
+                await ws.close(code=1008)
+            except Exception:
+                pass
+
+        # Cross-server: tell other backend nodes hosting this user's sockets to do the same.
+        await self.redis.publish(
+            f"doc_channel:{doc_id}",
+            json.dumps({"type": "_kick", "user_id": user_id, "reason": reason}),
+        )
 
     def get_document(self, doc_id: str) -> Document | None:
         return self._documents.get(doc_id)

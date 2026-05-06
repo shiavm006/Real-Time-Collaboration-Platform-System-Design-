@@ -78,8 +78,27 @@ export const documentService = {
     await api.post(`/documents/${docId}/permissions`, { email, role });
   },
 
-  getPermissions: async (docId: string): Promise<any[]> => {
+  updateRole: async (
+    docId: string,
+    userId: string,
+    role: string,
+  ): Promise<void> => {
+    await api.post(`/documents/${docId}/permissions`, { user_id: userId, role });
+  },
+
+  revokePermission: async (docId: string, userId: string): Promise<void> => {
+    await api.delete(`/documents/${docId}/permissions/${userId}`);
+  },
+
+  getPermissions: async (docId: string): Promise<PermissionEntry[]> => {
     const response = await api.get(`/documents/${docId}/permissions`);
     return response.data;
   },
 };
+
+export interface PermissionEntry {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: "owner" | "editor" | "viewer";
+}

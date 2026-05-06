@@ -123,24 +123,80 @@ async def grant_permission(
         new_role = RoleEnum(body.role)
     except ValueError:
         raise HTTPException(
-            status_code=400, detail="Invalid role. Use owner, editor, or viewer"
+            status_code=400, detail="Invalid role. Use editor or viewer"
+        )
+
+    # The doc creator is the only owner. Promoting another user to owner
+    # would create dual-ownership and inconsistency with documents.owner_id.
+    if new_role == RoleEnum.owner:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot grant owner role — each document has exactly one owner",
         )
 
     target_user_id = None
+    target_email = None
     if body.user_id:
         target_user_id = uuid.UUID(body.user_id)
     elif body.email:
         target_user = await AuthService.get_user_by_email(db, body.email)
         if not target_user:
             raise HTTPException(
-                status_code=404, detail="User with this email not found"
+                status_code=404,
+                detail=f"No account found for {body.email}. Ask them to sign up first.",
             )
         target_user_id = target_user.id
+        target_email = body.email
     else:
         raise HTTPException(status_code=400, detail="Must provide user_id or email")
 
+    # The owner cannot be demoted.
+    if target_user_id == doc.owner_id:
+        raise HTTPException(
+            status_code=400, detail="Cannot change the document owner's role"
+        )
+
     await PermissionService.grant(db, doc.id, target_user_id, new_role)
-    return {"message": f"Permission granted: {body.role}"}
+    label = target_email or str(target_user_id)
+    return {"message": f"Permission granted to {label}: {body.role}"}
+
+
+@router.delete("/{doc_id}/permissions/{user_id}")
+async def revoke_permission(
+    doc_id: str,
+    user_id: str,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    doc = await DocumentService.get(db, uuid.UUID(doc_id))
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    role = await PermissionService.get_role(db, doc.id, user.id)
+    if role != RoleEnum.owner:
+        raise HTTPException(status_code=403, detail="Only owner can manage permissions")
+
+    try:
+        target_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    if target_uuid == doc.owner_id:
+        raise HTTPException(
+            status_code=400, detail="Cannot revoke the document owner's access"
+        )
+
+    removed = await PermissionService.revoke(db, doc.id, target_uuid)
+    if not removed:
+        raise HTTPException(
+            status_code=404, detail="No existing permission for that user"
+        )
+
+    # Forcibly close any active sessions this user has on this doc.
+    from routers.websocket import manager
+
+    await manager.kick_user(doc_id, str(target_uuid), reason="permission_revoked")
+
+    return {"message": "Permission revoked"}
 
 
 @router.get("/{doc_id}/permissions")

@@ -175,6 +175,21 @@ export function Editor({ documentId }: { documentId: string }) {
             return;
           }
 
+          if (msg.type === "kicked") {
+            // Owner revoked our access. Disconnect cleanly and redirect home.
+            const reason: string = msg.reason || "permission_revoked";
+            try {
+              wsRef.current?.disconnect();
+            } catch {}
+            const message =
+              reason === "permission_revoked"
+                ? "Your access to this document was removed by the owner."
+                : "You've been disconnected from this document.";
+            if (typeof window !== "undefined") alert(message);
+            router.push("/");
+            return;
+          }
+
           if (msg.type === "error") {
             console.error("WS error:", msg.message);
           }

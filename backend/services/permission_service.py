@@ -1,5 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 from db.models import DocumentPermission, RoleEnum
 import uuid
 
@@ -37,7 +39,10 @@ class PermissionService:
     async def grant(
         db: AsyncSession, doc_id: uuid.UUID, user_id: uuid.UUID, role: RoleEnum
     ):
-        # Check if permission already exists
+        """
+        Upsert a permission row. Race-safe: if a concurrent insert wins the
+        unique-constraint race, we retry as an update on the surviving row.
+        """
         result = await db.execute(
             select(DocumentPermission).where(
                 DocumentPermission.document_id == doc_id,
@@ -47,13 +52,33 @@ class PermissionService:
         existing = result.scalar_one_or_none()
         if existing:
             existing.role = role
-        else:
-            perm = DocumentPermission(document_id=doc_id, user_id=user_id, role=role)
-            db.add(perm)
-        await db.commit()
+            await db.commit()
+            return
+
+        try:
+            db.add(
+                DocumentPermission(document_id=doc_id, user_id=user_id, role=role)
+            )
+            await db.commit()
+        except IntegrityError:
+            # Lost the race — another transaction inserted first; update instead.
+            await db.rollback()
+            result = await db.execute(
+                select(DocumentPermission).where(
+                    DocumentPermission.document_id == doc_id,
+                    DocumentPermission.user_id == user_id,
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                existing.role = role
+                await db.commit()
 
     @staticmethod
-    async def revoke(db: AsyncSession, doc_id: uuid.UUID, user_id: uuid.UUID):
+    async def revoke(
+        db: AsyncSession, doc_id: uuid.UUID, user_id: uuid.UUID
+    ) -> bool:
+        """Remove a permission row. Returns True if a row was deleted."""
         result = await db.execute(
             select(DocumentPermission).where(
                 DocumentPermission.document_id == doc_id,
@@ -61,16 +86,16 @@ class PermissionService:
             )
         )
         perm = result.scalar_one_or_none()
-        if perm:
-            await db.delete(perm)
-            await db.commit()
+        if not perm:
+            return False
+        await db.delete(perm)
+        await db.commit()
+        return True
 
     @staticmethod
     async def get_document_permissions(
         db: AsyncSession, doc_id: uuid.UUID
     ) -> list[DocumentPermission]:
-        from sqlalchemy.orm import joinedload
-
         result = await db.execute(
             select(DocumentPermission)
             .options(joinedload(DocumentPermission.user))
