@@ -5,9 +5,8 @@ import asyncio
 import redis.asyncio as aioredis
 from dotenv import load_dotenv
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from db.base import get_db, AsyncSessionLocal
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from db.base import AsyncSessionLocal
 from services.auth_service import AuthService
 from services.document_service import DocumentService
 from services.permission_service import PermissionService
@@ -19,10 +18,9 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 router = APIRouter(tags=["websocket"])
 
+
 # Observer Pattern — ConnectionManager observes all active connections
-
-
-# and broadcasts to all subscribers of a document room
+# and broadcasts to all subscribers of a document room.
 class ConnectionManager:
     """
     Manages WebSocket connections per document room.
@@ -31,8 +29,8 @@ class ConnectionManager:
     """
 
     def __init__(self):
-        # doc_id -> list of (websocket, user_id, connection_id)
-        self._rooms: dict[str, list[tuple[WebSocket, str, str]]] = {}
+        # doc_id -> list of (websocket, user_id, connection_id, full_name)
+        self._rooms: dict[str, list[tuple[WebSocket, str, str, str]]] = {}
         # doc_id -> Document (in-memory OT state)
         self._documents: dict[str, Document] = {}
         # doc_id -> asyncio.Task (the Redis listener loop for this room)
@@ -41,11 +39,19 @@ class ConnectionManager:
         # Initialize Redis global connection pool
         self.redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 
+    def _online_users(self, doc_id: str) -> list[str]:
+        """Distinct user_ids in a room (one entry per user, not per connection)."""
+        seen: dict[str, None] = {}
+        for _, uid, _, _ in self._rooms.get(doc_id, []):
+            seen.setdefault(uid, None)
+        return list(seen.keys())
+
     async def connect(
         self,
         doc_id: str,
         websocket: WebSocket,
         user_id: str,
+        full_name: str,
         content: str,
         revision: int,
     ) -> str:
@@ -57,15 +63,15 @@ class ConnectionManager:
             self._rooms[doc_id] = []
             self._documents[doc_id] = Document(doc_id, content, revision)
 
-            # Subscribing to Redis channel for this exact document!
+            # Subscribe to Redis channel for this exact document
             pubsub = self.redis.pubsub()
             await pubsub.subscribe(f"doc_channel:{doc_id}")
             task = asyncio.create_task(self._pubsub_listener(doc_id, pubsub))
             self._pubsub_tasks[doc_id] = task
 
-        self._rooms[doc_id].append((websocket, user_id, connection_id))
+        self._rooms[doc_id].append((websocket, user_id, connection_id, full_name))
 
-        # Send current doc state to newly connected client directly (Local action)
+        # Send current doc state to newly connected client directly (local action)
         await websocket.send_text(
             json.dumps(
                 {
@@ -76,30 +82,30 @@ class ConnectionManager:
             )
         )
 
-        # Notify entire Redis cluster that a new user joined
+        # Notify the room that a new user joined
         await self.broadcast(
             doc_id,
             {
                 "type": "presence",
                 "user_id": user_id,
+                "full_name": full_name,
                 "action": "joined",
-                "online_users": [uid for _, uid, _ in self._rooms[doc_id]],
+                "online_users": self._online_users(doc_id),
             },
-            exclude_conn_id=connection_id,
         )
 
         return connection_id
 
     async def _pubsub_listener(self, doc_id: str, pubsub):
-        """Asynchronous background daemon waiting for incoming cross-server Redis payloads."""
+        """Asynchronous background daemon waiting for cross-server Redis payloads."""
         try:
             async for message in pubsub.listen():
                 if message["type"] == "message":
                     payload = json.loads(message["data"])
                     exclude_conn_id = payload.get("_exclude_conn_id")
 
-                    # Fanout to local nodes
-                    for ws, uid, cid in self._rooms.get(doc_id, []):
+                    # Fanout to local sockets
+                    for ws, _uid, cid, _name in self._rooms.get(doc_id, []):
                         if cid != exclude_conn_id:
                             try:
                                 await ws.send_text(message["data"])
@@ -108,23 +114,24 @@ class ConnectionManager:
         except asyncio.CancelledError:
             await pubsub.unsubscribe(f"doc_channel:{doc_id}")
 
-    def disconnect(self, doc_id: str, websocket: WebSocket, user_id: str):
-        if doc_id in self._rooms:
-            self._rooms[doc_id] = [
-                (ws, uid, cid)
-                for ws, uid, cid in self._rooms[doc_id]
-                if ws != websocket
-            ]
-            if not self._rooms[doc_id]:
-                # Teardown the room entirely when empty
-                del self._rooms[doc_id]
-                del self._documents[doc_id]
-                if doc_id in self._pubsub_tasks:
-                    self._pubsub_tasks[doc_id].cancel()
-                    del self._pubsub_tasks[doc_id]
+    def disconnect(self, doc_id: str, websocket: WebSocket):
+        if doc_id not in self._rooms:
+            return
+        self._rooms[doc_id] = [
+            (ws, uid, cid, name)
+            for ws, uid, cid, name in self._rooms[doc_id]
+            if ws != websocket
+        ]
+        if not self._rooms[doc_id]:
+            # Tear down the room entirely when empty
+            del self._rooms[doc_id]
+            del self._documents[doc_id]
+            if doc_id in self._pubsub_tasks:
+                self._pubsub_tasks[doc_id].cancel()
+                del self._pubsub_tasks[doc_id]
 
     async def broadcast(self, doc_id: str, message: dict, exclude_conn_id: str = None):
-        """Pushes state out fully to Redis so ALL servers receive it."""
+        """Pushes state out via Redis so ALL servers receive it."""
         if exclude_conn_id:
             message["_exclude_conn_id"] = exclude_conn_id
         await self.redis.publish(f"doc_channel:{doc_id}", json.dumps(message))
@@ -151,7 +158,12 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
             await websocket.close(code=1008)
             return
 
-        doc_uuid = uuid.UUID(doc_id)
+        try:
+            doc_uuid = uuid.UUID(doc_id)
+        except ValueError:
+            await websocket.close(code=1008)
+            return
+
         if not await PermissionService.can_view(db, doc_uuid, user.id):
             await websocket.close(code=1008)
             return
@@ -162,17 +174,22 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
             return
 
         connection_id = await manager.connect(
-            doc_id, websocket, str(user.id), db_doc.content, db_doc.revision
+            doc_id,
+            websocket,
+            str(user.id),
+            user.full_name,
+            db_doc.content,
+            db_doc.revision,
         )
 
     try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
+            mtype = message.get("type")
 
-            if message["type"] == "operation":
+            if mtype == "operation":
                 async with AsyncSessionLocal() as db:
-                    # Check edit permission
                     if not await PermissionService.can_edit(db, doc_uuid, user.id):
                         await websocket.send_text(
                             json.dumps(
@@ -181,17 +198,29 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
                         )
                         continue
 
-                    # Get in-memory document
                     doc = manager.get_document(doc_id)
                     if not doc:
                         continue
 
-                    # Dependency Injected SRP Facade Engine
                     transformed_op_dict = await OTService.process_operation(
                         db, doc_uuid, doc, user, message["operation"]
                     )
 
-                # Broadcast transformed op globally to cluster
+                # Acknowledge the sender so it can reconcile its revision
+                client_op_id = message.get("operation", {}).get("client_op_id")
+                ack_payload: dict = {
+                    "type": "ack",
+                    "operation": transformed_op_dict,
+                    "revision": transformed_op_dict.get("revision"),
+                }
+                if client_op_id:
+                    ack_payload["client_op_id"] = client_op_id
+                try:
+                    await websocket.send_text(json.dumps(ack_payload))
+                except Exception:
+                    pass
+
+                # Broadcast transformed op to other rooms members (cluster-wide)
                 await manager.broadcast(
                     doc_id,
                     {
@@ -202,29 +231,33 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
                     exclude_conn_id=connection_id,
                 )
 
-            elif message["type"] == "cursor":
+            elif mtype == "cursor":
                 # Broadcast cursor globally
                 await manager.broadcast(
                     doc_id,
                     {
                         "type": "cursor",
                         "user_id": str(user.id),
+                        "full_name": user.full_name,
                         "position": message.get("position", 0),
                     },
                     exclude_conn_id=connection_id,
                 )
 
+            # Unknown message types are ignored.
+
     except WebSocketDisconnect:
-        async with AsyncSessionLocal() as db:
-            manager.disconnect(doc_id, websocket, str(user.id))
-            await manager.broadcast(
-                doc_id,
-                {
-                    "type": "presence",
-                    "user_id": str(user.id),
-                    "action": "left",
-                    "online_users": [
-                        uid for _, uid, _ in manager._rooms.get(doc_id, [])
-                    ],
-                },
-            )
+        manager.disconnect(doc_id, websocket)
+        await manager.broadcast(
+            doc_id,
+            {
+                "type": "presence",
+                "user_id": str(user.id),
+                "full_name": user.full_name,
+                "action": "left",
+                "online_users": manager._online_users(doc_id),
+            },
+        )
+    except Exception:
+        # Defensive — make sure we always clean up on unexpected errors
+        manager.disconnect(doc_id, websocket)

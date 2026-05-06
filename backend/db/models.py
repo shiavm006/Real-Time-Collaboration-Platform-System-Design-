@@ -11,7 +11,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
-from db.base import Base
+from db.base import Base, utc_now
 import enum
 
 
@@ -30,7 +30,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     documents: Mapped[list["Document"]] = relationship(
         "Document", back_populates="owner"
@@ -59,9 +59,9 @@ class Document(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
     owner: Mapped["User"] = relationship("User", back_populates="documents")
@@ -116,7 +116,7 @@ class OperationLog(Base):
     char: Mapped[str] = mapped_column(String(255), nullable=True)
     length: Mapped[int] = mapped_column(Integer, nullable=True, default=1)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     document: Mapped["Document"] = relationship("Document", back_populates="operations")
     user: Mapped["User"] = relationship("User", back_populates="operations")
@@ -136,7 +136,7 @@ class Version(Base):
     )
     snapshot: Mapped[str] = mapped_column(Text, nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     document: Mapped["Document"] = relationship("Document", back_populates="versions")
     created_by_user: Mapped["User"] = relationship("User", back_populates="versions")

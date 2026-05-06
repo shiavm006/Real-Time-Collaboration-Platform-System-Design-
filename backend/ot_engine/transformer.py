@@ -40,105 +40,127 @@ class Transformer:
         op1: InsertOperation, op2: InsertOperation
     ) -> InsertOperation:
         """
-        Both users inserted at the same time.
+        Both users inserted concurrently.
 
-        Case 1: op1 inserted BEFORE op2's position
-                → op2's position shifts right by 1
-
-        Case 2: op1 inserted AFTER op2's position
-                → op2's position stays the same
-
-        Case 3: op1 and op2 inserted at SAME position
-                → tie-break by user_id to keep consistency across all clients
+        - op1 strictly before op2: shift op2 right by len(op1.char).
+        - op1 strictly after op2:  no shift.
+        - Same position:           tie-break by user_id (lower id "wins"
+                                   the earlier slot; loser shifts right).
         """
         if op1.position < op2.position:
-            # op1 pushed everything right, so op2 must move right too
             return InsertOperation(
                 op2.position + len(op1.char), op2.char, op2.revision, op2.user_id
             )
 
-        elif op1.position > op2.position:
-            # op1 is to the right, op2 position unaffected
+        if op1.position > op2.position:
             return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
 
-        else:
-            # Same position — use user_id as tie-breaker for determinism
-            if op1.user_id <= op2.user_id:
-                return InsertOperation(
-                    op2.position + len(op1.char), op2.char, op2.revision, op2.user_id
-                )
-            else:
-                return InsertOperation(
-                    op2.position, op2.char, op2.revision, op2.user_id
-                )
+        # Same position — deterministic tie-break
+        if op1.user_id <= op2.user_id:
+            return InsertOperation(
+                op2.position + len(op1.char), op2.char, op2.revision, op2.user_id
+            )
+        return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
 
     @staticmethod
     def _transform_insert_delete(
         op1: InsertOperation, op2: DeleteOperation
     ) -> DeleteOperation:
         """
-        op1 inserted, op2 deleted at the same time.
+        op1 inserted concurrently with op2 deleting.
 
-        Case 1: op1 inserted BEFORE op2's delete position
-                → op2's position shifts right by 1
-
-        Case 2: op1 inserted AFTER or AT op2's delete position
-                → op2's position stays the same
+        - Insert at or before delete start: shift delete right by len(op1.char).
+        - Insert strictly inside delete range: extend delete length to absorb
+          the inserted text (so the user's deletion still removes the original
+          characters, plus the newly-inserted text wedged in).
+        - Insert at or after delete end: no shift.
         """
+        delete_end = op2.position + op2.length
         if op1.position <= op2.position:
             return DeleteOperation(
-                op2.position + len(op1.char), op2.revision, op2.user_id
+                op2.position + len(op1.char),
+                op2.revision,
+                op2.user_id,
+                op2.length,
             )
-        else:
-            return DeleteOperation(op2.position, op2.revision, op2.user_id)
+        if op1.position < delete_end:
+            # Insert lands inside op2's delete range — absorb the inserted chars.
+            return DeleteOperation(
+                op2.position,
+                op2.revision,
+                op2.user_id,
+                op2.length + len(op1.char),
+            )
+        return DeleteOperation(op2.position, op2.revision, op2.user_id, op2.length)
 
     @staticmethod
     def _transform_delete_insert(
         op1: DeleteOperation, op2: InsertOperation
     ) -> InsertOperation:
         """
-        op1 deleted, op2 inserted at the same time.
+        op1 deleted concurrently with op2 inserting.
 
-        Case 1: op1 deleted BEFORE op2's insert position
-                → op2's position shifts left by 1
-
-        Case 2: op1 deleted AFTER op2's insert position
-                → op2's position stays the same
+        - Insert at or before delete start: no shift.
+        - Insert at or after delete end:    shift left by op1.length.
+        - Insert strictly inside delete range: clamp to op1's start
+          (the original surrounding chars are gone; insert lands where they used to be).
         """
-        if op1.position < op2.position:
+        delete_end = op1.position + op1.length
+        if op2.position <= op1.position:
+            return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
+        if op2.position >= delete_end:
             return InsertOperation(
                 op2.position - op1.length, op2.char, op2.revision, op2.user_id
             )
-        else:
-            return InsertOperation(op2.position, op2.char, op2.revision, op2.user_id)
+        # Insert was inside the deleted range — clamp to where the range used to start
+        return InsertOperation(op1.position, op2.char, op2.revision, op2.user_id)
 
     @staticmethod
     def _transform_delete_delete(
         op1: DeleteOperation, op2: DeleteOperation
     ) -> Operation:
         """
-        Both users deleted at the same time.
+        Two concurrent deletes. Six topological cases.
 
-        Case 1: op1 deleted BEFORE op2's position
-                → op2's position shifts left by 1
-
-        Case 2: op1 deleted AFTER op2's position
-                → op2's position stays the same
-
-        Case 3: SAME position — both deleted the same character
-                → op2 becomes a no-op (nothing left to delete)
+        Notation: op1 = [a, a+m), op2 = [b, b+n).
         """
-        if op1.position < op2.position:
-            return DeleteOperation(
-                op2.position - op1.length, op2.revision, op2.user_id, op2.length
-            )
+        a, m = op1.position, op1.length
+        b, n = op2.position, op2.length
+        a_end = a + m
+        b_end = b + n
 
-        elif op1.position > op2.position:
-            return DeleteOperation(op2.position, op2.revision, op2.user_id, op2.length)
+        # 1. op2 entirely before op1 → no change
+        if b_end <= a:
+            return DeleteOperation(b, op2.revision, op2.user_id, n)
 
-        else:
-            # Same character deleted by both — return no-op delete at safe position
+        # 2. op2 entirely after op1 → shift left by op1.length
+        if b >= a_end:
+            return DeleteOperation(b - m, op2.revision, op2.user_id, n)
+
+        # 3. op1 fully contains op2 → op2 has nothing left to delete (NoOp)
+        if a <= b and a_end >= b_end:
             return NoOpOperation(op2.revision, op2.user_id)
+
+        # 4. op2 fully contains op1 → op2 keeps the bytes outside op1
+        if b <= a and b_end >= a_end:
+            new_length = n - m
+            if new_length <= 0:
+                return NoOpOperation(op2.revision, op2.user_id)
+            # b is at or before a, so b's position is unaffected by op1's left-shift
+            return DeleteOperation(b, op2.revision, op2.user_id, new_length)
+
+        # 5. Partial overlap, op1 starts first (a < b < a_end < b_end)
+        if a < b and b < a_end and a_end < b_end:
+            # Surviving range: [a_end, b_end), shifted left by m → [a, b_end - m)
+            return DeleteOperation(a, op2.revision, op2.user_id, b_end - a_end)
+
+        # 6. Partial overlap, op2 starts first (b < a < b_end < a_end)
+        if b < a and a < b_end and b_end < a_end:
+            # Surviving range: [b, a) — entirely before op1, unaffected by shift
+            return DeleteOperation(b, op2.revision, op2.user_id, a - b)
+
+        # Defensive fallthrough — shouldn't be reachable.
+        return DeleteOperation(b, op2.revision, op2.user_id, n)
 
 
 # No-op operation — returned when a conflict resolves to "nothing to do"

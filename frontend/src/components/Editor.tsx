@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { documentService } from "@/lib/documentService";
 import { CollabWebSocket, type ConnectionState } from "@/lib/websocket";
-import { getOperationFromDiff, applyOperation } from "@/lib/ot";
+import {
+  applyOperation,
+  getOperationsFromDiff,
+  remapCursor,
+  type RemoteOperation,
+} from "@/lib/ot";
 import { EditorNavbar } from "@/components/editor/EditorNavbar";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { EditorArea } from "@/components/editor/EditorArea";
@@ -41,8 +52,18 @@ export function Editor({ documentId }: { documentId: string }) {
   const wsRef = useRef<CollabWebSocket | null>(null);
   const contentRef = useRef(content);
   const revisionRef = useRef(revision);
+  const userRef = useRef(user);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Keep state in sync with refs for rendering
+  // Selection [start, end] to apply on the next render. Set when remote ops
+  // arrive (so we can remap the cursor) or when init replaces content (so
+  // we can clamp the cursor inside the new content length).
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(
+    null,
+  );
+  const savingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mirror state into refs so handlers always see fresh values
   useEffect(() => {
     contentRef.current = content;
   }, [content]);
@@ -52,13 +73,18 @@ export function Editor({ documentId }: { documentId: string }) {
   }, [revision]);
 
   useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated || !user) {
       setDocLoading(false);
       return;
     }
 
-    let ws: CollabWebSocket;
+    let ws: CollabWebSocket | null = null;
+    let cancelled = false;
 
     const init = async () => {
       const token = localStorage.getItem("token");
@@ -66,9 +92,12 @@ export function Editor({ documentId }: { documentId: string }) {
 
       try {
         const doc = await documentService.getDocument(documentId);
+        if (cancelled) return;
         setContent(doc.content || "");
         setTitle(doc.title);
         setRevision(doc.revision || 0);
+        contentRef.current = doc.content || "";
+        revisionRef.current = doc.revision || 0;
         setDocLoading(false);
 
         ws = new CollabWebSocket(documentId, token);
@@ -78,44 +107,76 @@ export function Editor({ documentId }: { documentId: string }) {
         });
 
         ws.on("message", (msg: any) => {
-          if (msg.type === "operation") {
-            if (msg.user_id !== user.id) {
-              const newContent = applyOperation(
-                contentRef.current,
-                msg.operation,
-              );
-              contentRef.current = newContent;
-              revisionRef.current = msg.operation.revision;
-
-              setContent(newContent);
-              setRevision(msg.operation.revision);
-            }
-          }
+          // Server snapshot — initial connect, reconnect, or version restore
           if (msg.type === "init") {
-            contentRef.current = msg.content;
-            revisionRef.current = msg.revision;
-            setContent(msg.content);
-            setRevision(msg.revision);
-          }
-          if (msg.type === "presence") {
-            setOnlineUsers(
-              Array.from(new Set(msg.online_users as string[])) || [],
-            );
-          }
-          if (msg.type === "cursor") {
-            if (msg.user_id !== user.id) {
-              setTypingUsers((prev) => {
-                if (!prev.includes(msg.user_id)) return [...prev, msg.user_id];
-                return prev;
-              });
-
-              // Remove typing indicator after 2 seconds of inactivity
-              setTimeout(() => {
-                setTypingUsers((prev) =>
-                  prev.filter((id) => id !== msg.user_id),
-                );
-              }, 2000);
+            const next: string = msg.content ?? "";
+            const nextRev: number = msg.revision ?? 0;
+            contentRef.current = next;
+            revisionRef.current = nextRev;
+            setContent(next);
+            setRevision(nextRev);
+            const ta = textareaRef.current;
+            if (ta) {
+              const clamp = Math.min(ta.selectionStart, next.length);
+              pendingSelectionRef.current = { start: clamp, end: clamp };
             }
+            return;
+          }
+
+          // Server ack for an op we sent — correct any drift in our revision
+          if (msg.type === "ack") {
+            if (typeof msg.revision === "number") {
+              revisionRef.current = msg.revision;
+              setRevision(msg.revision);
+            }
+            return;
+          }
+
+          // A remote op from another user — apply and remap our cursor
+          if (msg.type === "operation") {
+            const op = msg.operation as RemoteOperation;
+            const me = userRef.current;
+            if (me && msg.user_id === me.id) return; // we already applied locally
+
+            const ta = textareaRef.current;
+            if (ta) {
+              pendingSelectionRef.current = remapCursor(
+                ta.selectionStart,
+                ta.selectionEnd,
+                op,
+              );
+            }
+
+            const newContent = applyOperation(contentRef.current, op);
+            contentRef.current = newContent;
+            revisionRef.current = op.revision;
+            setContent(newContent);
+            setRevision(op.revision);
+            return;
+          }
+
+          if (msg.type === "presence") {
+            const list: string[] = Array.isArray(msg.online_users)
+              ? msg.online_users
+              : [];
+            setOnlineUsers(Array.from(new Set(list)));
+            return;
+          }
+
+          if (msg.type === "cursor") {
+            const me = userRef.current;
+            if (me && msg.user_id === me.id) return;
+            setTypingUsers((prev) =>
+              prev.includes(msg.user_id) ? prev : [...prev, msg.user_id],
+            );
+            setTimeout(() => {
+              setTypingUsers((prev) => prev.filter((id) => id !== msg.user_id));
+            }, 2000);
+            return;
+          }
+
+          if (msg.type === "error") {
+            console.error("WS error:", msg.message);
           }
         });
 
@@ -130,36 +191,59 @@ export function Editor({ documentId }: { documentId: string }) {
     init();
 
     return () => {
+      cancelled = true;
+      if (savingTimerRef.current) clearTimeout(savingTimerRef.current);
       if (wsRef.current) wsRef.current.disconnect();
     };
   }, [documentId, user, isAuthenticated, authLoading]);
 
-  const handleContentChange = useCallback(
-    (newText: string) => {
-      if (!user) return;
-      const op = getOperationFromDiff(
-        contentRef.current,
-        newText,
-        revisionRef.current,
-        user.id,
-      );
+  // Apply pending cursor selection AFTER React commits the new content.
+  // useLayoutEffect runs synchronously before the browser paints, avoiding
+  // a flicker of the cursor jumping to the end and back.
+  useLayoutEffect(() => {
+    const target = pendingSelectionRef.current;
+    if (!target) return;
+    pendingSelectionRef.current = null;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const len = ta.value.length;
+    const start = Math.min(Math.max(target.start, 0), len);
+    const end = Math.min(Math.max(target.end, 0), len);
+    ta.setSelectionRange(start, end);
+  });
 
-      contentRef.current = newText;
-      setContent(newText);
+  const handleContentChange = useCallback((newText: string) => {
+    const me = userRef.current;
+    const ws = wsRef.current;
+    if (!me) return;
 
-      if (op && wsRef.current) {
-        setSaving(true);
-        wsRef.current.send({ type: "operation", operation: op });
+    const oldText = contentRef.current;
+    if (oldText === newText) return;
 
-        const newRev = revisionRef.current + 1;
-        revisionRef.current = newRev;
-        setRevision(newRev);
+    const ops = getOperationsFromDiff(
+      oldText,
+      newText,
+      revisionRef.current,
+      me.id,
+    );
 
-        setTimeout(() => setSaving(false), 600);
-      }
-    },
-    [user],
-  );
+    contentRef.current = newText;
+    setContent(newText);
+
+    if (ops.length === 0 || !ws) return;
+
+    setSaving(true);
+    if (savingTimerRef.current) clearTimeout(savingTimerRef.current);
+    savingTimerRef.current = setTimeout(() => setSaving(false), 600);
+
+    // Send each op in order, bumping our optimistic revision per send so
+    // the server sees the right "based on" revision for the next op.
+    for (const op of ops) {
+      ws.send({ type: "operation", operation: op });
+      revisionRef.current += 1;
+    }
+    setRevision(revisionRef.current);
+  }, []);
 
   const handleCursorMove = useCallback(
     (position: number) => {
@@ -222,6 +306,7 @@ export function Editor({ documentId }: { documentId: string }) {
       <EditorToolbar />
 
       <EditorArea
+        ref={textareaRef}
         content={content}
         onChange={handleContentChange}
         onCursorMove={handleCursorMove}

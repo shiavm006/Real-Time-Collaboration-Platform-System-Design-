@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 import os
 import bcrypt as _bcrypt
@@ -6,6 +6,7 @@ import bcrypt as _bcrypt
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from db.base import utc_now
 from db.models import User, Session
 from dotenv import load_dotenv
 import uuid
@@ -34,7 +35,7 @@ class AuthService:
         data: dict, expires_delta: Optional[timedelta] = None
     ) -> str:
         to_encode = data.copy()
-        expire = datetime.utcnow() + (
+        expire = utc_now() + (
             expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
         to_encode.update({"exp": expire})
@@ -79,7 +80,7 @@ class AuthService:
         session = Session(
             user_id=user.id,
             token=token,
-            expires_at=datetime.utcnow()
+            expires_at=utc_now()
             + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         )
         db.add(session)
