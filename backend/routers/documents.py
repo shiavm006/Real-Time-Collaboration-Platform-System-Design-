@@ -268,7 +268,14 @@ async def restore_version(
     import json
 
     await manager.broadcast(
-        doc_id, {"type": "init", "content": doc.content, "revision": doc.revision}
+        doc_id,
+        {
+            "type": "init",
+            "content": doc.content,
+            "revision": doc.revision,
+            "title": doc.title,
+            "owner_id": str(doc.owner_id),
+        },
     )
 
     return {"message": "Version restored"}

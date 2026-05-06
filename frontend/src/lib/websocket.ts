@@ -62,16 +62,20 @@ export class CollabWebSocket {
       }
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
       this.ws = null;
       this.emit("disconnect", null);
 
-      if (!this.intentionalClose) {
-        this.setState("reconnecting");
-        this.scheduleReconnect();
-      } else {
+      // 1008 = policy violation (auth failure / no permission / doc missing).
+      // Retrying won't help — fail fast so the UI can show an error instead
+      // of spending ~3 minutes burning through 10 reconnect attempts.
+      if (this.intentionalClose || event.code === 1008) {
         this.setState("disconnected");
+        return;
       }
+
+      this.setState("reconnecting");
+      this.scheduleReconnect();
     };
 
     this.ws.onerror = () => {

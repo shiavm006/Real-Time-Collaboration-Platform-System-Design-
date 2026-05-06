@@ -54,6 +54,8 @@ class ConnectionManager:
         full_name: str,
         content: str,
         revision: int,
+        title: str = "",
+        owner_id: str = "",
     ) -> str:
         """Accepts connection, yields unique connection_id, starts pubsub if needed."""
         await websocket.accept()
@@ -71,13 +73,16 @@ class ConnectionManager:
 
         self._rooms[doc_id].append((websocket, user_id, connection_id, full_name))
 
-        # Send current doc state to newly connected client directly (local action)
+        # Send current doc state + metadata so the client doesn't need a separate REST
+        # fetch on document open (saves one WAN round-trip on the hot path).
         await websocket.send_text(
             json.dumps(
                 {
                     "type": "init",
                     "content": self._documents[doc_id].content,
                     "revision": self._documents[doc_id].revision,
+                    "title": title,
+                    "owner_id": owner_id,
                 }
             )
         )
@@ -232,6 +237,8 @@ async def websocket_endpoint(doc_id: str, websocket: WebSocket):
             user.full_name,
             db_doc.content,
             db_doc.revision,
+            db_doc.title,
+            str(db_doc.owner_id),
         )
 
     try:

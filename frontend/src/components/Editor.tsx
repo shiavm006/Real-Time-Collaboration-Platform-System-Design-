@@ -7,6 +7,7 @@ import {
   useCallback,
   useLayoutEffect,
 } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { documentService } from "@/lib/documentService";
@@ -20,13 +21,38 @@ import {
 import { EditorNavbar } from "@/components/editor/EditorNavbar";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { EditorArea } from "@/components/editor/EditorArea";
-import { VersionHistoryPanel } from "@/components/panels/VersionHistoryPanel";
-import { SharePanel } from "@/components/panels/SharePanel";
-import { CommentsPanel } from "@/components/panels/CommentsPanel";
-import { AIAssistantPanel } from "@/components/panels/AIAssistantPanel";
 import { SkeletonEditor } from "@/components/ui/Skeleton";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+
+// Panels are not on the critical path — defer their JS until first open.
+// `ssr: false` keeps them out of the server bundle entirely.
+const VersionHistoryPanel = dynamic(
+  () =>
+    import("@/components/panels/VersionHistoryPanel").then(
+      (m) => m.VersionHistoryPanel,
+    ),
+  { ssr: false },
+);
+const SharePanel = dynamic(
+  () => import("@/components/panels/SharePanel").then((m) => m.SharePanel),
+  { ssr: false },
+);
+const CommentsPanel = dynamic(
+  () =>
+    import("@/components/panels/CommentsPanel").then((m) => m.CommentsPanel),
+  { ssr: false },
+);
+const AIAssistantPanel = dynamic(
+  () =>
+    import("@/components/panels/AIAssistantPanel").then(
+      (m) => m.AIAssistantPanel,
+    ),
+  { ssr: false },
+);
+
+const CURSOR_THROTTLE_MS = 200; // max 5 cursor messages/sec, regardless of typing speed
+const TYPING_INDICATOR_MS = 2000;
 
 export function Editor({ documentId }: { documentId: string }) {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -41,6 +67,7 @@ export function Editor({ documentId }: { documentId: string }) {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
   const [docLoading, setDocLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   // Panel states
   const [showVersionHistory, setShowVersionHistory] = useState(false);
@@ -50,27 +77,28 @@ export function Editor({ documentId }: { documentId: string }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const wsRef = useRef<CollabWebSocket | null>(null);
-  const contentRef = useRef(content);
-  const revisionRef = useRef(revision);
+  const contentRef = useRef("");
+  const revisionRef = useRef(0);
   const userRef = useRef(user);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const initReceivedRef = useRef(false);
 
-  // Selection [start, end] to apply on the next render. Set when remote ops
-  // arrive (so we can remap the cursor) or when init replaces content (so
-  // we can clamp the cursor inside the new content length).
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(
     null,
   );
   const savingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Mirror state into refs so handlers always see fresh values
-  useEffect(() => {
-    contentRef.current = content;
-  }, [content]);
+  // Cursor send throttle: leading + trailing edge over CURSOR_THROTTLE_MS.
+  const cursorLastSentAtRef = useRef(0);
+  const cursorTrailingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const cursorPendingPosRef = useRef(0);
 
-  useEffect(() => {
-    revisionRef.current = revision;
-  }, [revision]);
+  // One typing timer per user — reset, don't stack.
+  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   useEffect(() => {
     userRef.current = user;
@@ -83,138 +111,137 @@ export function Editor({ documentId }: { documentId: string }) {
       return;
     }
 
-    let ws: CollabWebSocket | null = null;
-    let cancelled = false;
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
-    const init = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) return;
+    initReceivedRef.current = false;
+    setAccessDenied(false);
 
-      try {
-        const doc = await documentService.getDocument(documentId);
-        if (cancelled) return;
-        setContent(doc.content || "");
-        setTitle(doc.title);
-        setRevision(doc.revision || 0);
-        contentRef.current = doc.content || "";
-        revisionRef.current = doc.revision || 0;
+    const ws = new CollabWebSocket(documentId, token);
+
+    ws.onStateChange((state) => {
+      setConnectionState(state);
+      // If we never received init and the WS goes to disconnected (out of
+      // retries), assume access denied / doc missing.
+      if (state === "disconnected" && !initReceivedRef.current) {
         setDocLoading(false);
-
-        ws = new CollabWebSocket(documentId, token);
-
-        ws.onStateChange((state) => {
-          setConnectionState(state);
-        });
-
-        ws.on("message", (msg: any) => {
-          // Server snapshot — initial connect, reconnect, or version restore
-          if (msg.type === "init") {
-            const next: string = msg.content ?? "";
-            const nextRev: number = msg.revision ?? 0;
-            contentRef.current = next;
-            revisionRef.current = nextRev;
-            setContent(next);
-            setRevision(nextRev);
-            const ta = textareaRef.current;
-            if (ta) {
-              const clamp = Math.min(ta.selectionStart, next.length);
-              pendingSelectionRef.current = { start: clamp, end: clamp };
-            }
-            return;
-          }
-
-          // Server ack for an op we sent — correct any drift in our revision
-          if (msg.type === "ack") {
-            if (typeof msg.revision === "number") {
-              revisionRef.current = msg.revision;
-              setRevision(msg.revision);
-            }
-            return;
-          }
-
-          // A remote op from another user — apply and remap our cursor
-          if (msg.type === "operation") {
-            const op = msg.operation as RemoteOperation;
-            const me = userRef.current;
-            if (me && msg.user_id === me.id) return; // we already applied locally
-
-            const ta = textareaRef.current;
-            if (ta) {
-              pendingSelectionRef.current = remapCursor(
-                ta.selectionStart,
-                ta.selectionEnd,
-                op,
-              );
-            }
-
-            const newContent = applyOperation(contentRef.current, op);
-            contentRef.current = newContent;
-            revisionRef.current = op.revision;
-            setContent(newContent);
-            setRevision(op.revision);
-            return;
-          }
-
-          if (msg.type === "presence") {
-            const list: string[] = Array.isArray(msg.online_users)
-              ? msg.online_users
-              : [];
-            setOnlineUsers(Array.from(new Set(list)));
-            return;
-          }
-
-          if (msg.type === "cursor") {
-            const me = userRef.current;
-            if (me && msg.user_id === me.id) return;
-            setTypingUsers((prev) =>
-              prev.includes(msg.user_id) ? prev : [...prev, msg.user_id],
-            );
-            setTimeout(() => {
-              setTypingUsers((prev) => prev.filter((id) => id !== msg.user_id));
-            }, 2000);
-            return;
-          }
-
-          if (msg.type === "kicked") {
-            // Owner revoked our access. Disconnect cleanly and redirect home.
-            const reason: string = msg.reason || "permission_revoked";
-            try {
-              wsRef.current?.disconnect();
-            } catch {}
-            const message =
-              reason === "permission_revoked"
-                ? "Your access to this document was removed by the owner."
-                : "You've been disconnected from this document.";
-            if (typeof window !== "undefined") alert(message);
-            router.push("/");
-            return;
-          }
-
-          if (msg.type === "error") {
-            console.error("WS error:", msg.message);
-          }
-        });
-
-        ws.connect();
-        wsRef.current = ws;
-      } catch (e) {
-        console.error("Failed to load document", e);
-        setDocLoading(false);
+        setAccessDenied(true);
       }
-    };
+    });
 
-    init();
+    ws.on("message", (msg: any) => {
+      // Server snapshot — initial connect, reconnect, or version restore
+      if (msg.type === "init") {
+        const next: string = msg.content ?? "";
+        const nextRev: number = msg.revision ?? 0;
+        contentRef.current = next;
+        revisionRef.current = nextRev;
+        setContent(next);
+        setRevision(nextRev);
+        if (typeof msg.title === "string" && msg.title) setTitle(msg.title);
+        if (!initReceivedRef.current) {
+          initReceivedRef.current = true;
+          setDocLoading(false);
+        }
+        const ta = textareaRef.current;
+        if (ta) {
+          const clamp = Math.min(ta.selectionStart, next.length);
+          pendingSelectionRef.current = { start: clamp, end: clamp };
+        }
+        return;
+      }
+
+      if (msg.type === "ack") {
+        if (typeof msg.revision === "number") {
+          revisionRef.current = msg.revision;
+          setRevision(msg.revision);
+        }
+        return;
+      }
+
+      if (msg.type === "operation") {
+        const op = msg.operation as RemoteOperation;
+        const me = userRef.current;
+        if (me && msg.user_id === me.id) return;
+
+        const ta = textareaRef.current;
+        if (ta) {
+          pendingSelectionRef.current = remapCursor(
+            ta.selectionStart,
+            ta.selectionEnd,
+            op,
+          );
+        }
+
+        const newContent = applyOperation(contentRef.current, op);
+        contentRef.current = newContent;
+        revisionRef.current = op.revision;
+        setContent(newContent);
+        setRevision(op.revision);
+        return;
+      }
+
+      if (msg.type === "presence") {
+        const list: string[] = Array.isArray(msg.online_users)
+          ? msg.online_users
+          : [];
+        setOnlineUsers(Array.from(new Set(list)));
+        return;
+      }
+
+      if (msg.type === "cursor") {
+        const me = userRef.current;
+        if (me && msg.user_id === me.id) return;
+
+        const uid = msg.user_id as string;
+        setTypingUsers((prev) => (prev.includes(uid) ? prev : [...prev, uid]));
+
+        // Reset (don't stack) the per-user timeout so we don't leak timers
+        // and avoid 50 setStates 2 seconds after a typing burst.
+        const existing = typingTimersRef.current.get(uid);
+        if (existing) clearTimeout(existing);
+        const timer = setTimeout(() => {
+          setTypingUsers((prev) => prev.filter((id) => id !== uid));
+          typingTimersRef.current.delete(uid);
+        }, TYPING_INDICATOR_MS);
+        typingTimersRef.current.set(uid, timer);
+        return;
+      }
+
+      if (msg.type === "kicked") {
+        const reason: string = msg.reason || "permission_revoked";
+        try {
+          wsRef.current?.disconnect();
+        } catch {}
+        const message =
+          reason === "permission_revoked"
+            ? "Your access to this document was removed by the owner."
+            : "You've been disconnected from this document.";
+        if (typeof window !== "undefined") alert(message);
+        router.push("/");
+        return;
+      }
+
+      if (msg.type === "error") {
+        console.error("WS error:", msg.message);
+      }
+    });
+
+    ws.connect();
+    wsRef.current = ws;
 
     return () => {
-      cancelled = true;
       if (savingTimerRef.current) clearTimeout(savingTimerRef.current);
-      if (wsRef.current) wsRef.current.disconnect();
+      if (cursorTrailingTimerRef.current) {
+        clearTimeout(cursorTrailingTimerRef.current);
+        cursorTrailingTimerRef.current = null;
+      }
+      typingTimersRef.current.forEach((t) => clearTimeout(t));
+      typingTimersRef.current.clear();
+      ws.disconnect();
     };
-  }, [documentId, user, isAuthenticated, authLoading]);
+  }, [documentId, user, isAuthenticated, authLoading, router]);
 
-  // Apply pending cursor selection AFTER React commits the new content.
-  // useLayoutEffect runs synchronously before the browser paints, avoiding
-  // a flicker of the cursor jumping to the end and back.
   useLayoutEffect(() => {
     const target = pendingSelectionRef.current;
     if (!target) return;
@@ -251,8 +278,6 @@ export function Editor({ documentId }: { documentId: string }) {
     if (savingTimerRef.current) clearTimeout(savingTimerRef.current);
     savingTimerRef.current = setTimeout(() => setSaving(false), 600);
 
-    // Send each op in order, bumping our optimistic revision per send so
-    // the server sees the right "based on" revision for the next op.
     for (const op of ops) {
       ws.send({ type: "operation", operation: op });
       revisionRef.current += 1;
@@ -260,11 +285,34 @@ export function Editor({ documentId }: { documentId: string }) {
     setRevision(revisionRef.current);
   }, []);
 
+  // Throttled cursor send: at most one message per CURSOR_THROTTLE_MS,
+  // with a trailing send so the final position isn't lost.
   const handleCursorMove = useCallback(
     (position: number) => {
-      if (wsRef.current && isAuthenticated) {
+      if (!wsRef.current || !isAuthenticated) return;
+      cursorPendingPosRef.current = position;
+
+      const now = Date.now();
+      const elapsed = now - cursorLastSentAtRef.current;
+
+      if (elapsed >= CURSOR_THROTTLE_MS) {
         wsRef.current.send({ type: "cursor", position });
+        cursorLastSentAtRef.current = now;
+        return;
       }
+
+      if (cursorTrailingTimerRef.current) return;
+      const wait = CURSOR_THROTTLE_MS - elapsed;
+      cursorTrailingTimerRef.current = setTimeout(() => {
+        cursorTrailingTimerRef.current = null;
+        if (wsRef.current && isAuthenticated) {
+          wsRef.current.send({
+            type: "cursor",
+            position: cursorPendingPosRef.current,
+          });
+          cursorLastSentAtRef.current = Date.now();
+        }
+      }, wait);
     },
     [isAuthenticated],
   );
@@ -303,6 +351,24 @@ export function Editor({ documentId }: { documentId: string }) {
     );
   }
 
+  if (accessDenied) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-foreground font-medium mb-1">
+            Can&apos;t open this document
+          </p>
+          <p className="text-muted text-sm mb-4">
+            It may have been deleted, or you don&apos;t have access.
+          </p>
+          <Button variant="primary" onClick={() => router.push("/")}>
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-background min-h-screen">
       <EditorNavbar
@@ -329,24 +395,31 @@ export function Editor({ documentId }: { documentId: string }) {
         placeholder="Start writing your collaborative document here..."
       />
 
-      {/* Panels */}
-      <VersionHistoryPanel
-        isOpen={showVersionHistory}
-        onClose={() => setShowVersionHistory(false)}
-        documentId={documentId}
-      />
-      <SharePanel
-        isOpen={showShare}
-        onClose={() => setShowShare(false)}
-        documentId={documentId}
-      />
-      <CommentsPanel
-        isOpen={showComments}
-        onClose={() => setShowComments(false)}
-      />
-      <AIAssistantPanel isOpen={showAI} onClose={() => setShowAI(false)} />
+      {/* Panels — chunks load on first open */}
+      {showVersionHistory && (
+        <VersionHistoryPanel
+          isOpen={showVersionHistory}
+          onClose={() => setShowVersionHistory(false)}
+          documentId={documentId}
+        />
+      )}
+      {showShare && (
+        <SharePanel
+          isOpen={showShare}
+          onClose={() => setShowShare(false)}
+          documentId={documentId}
+        />
+      )}
+      {showComments && (
+        <CommentsPanel
+          isOpen={showComments}
+          onClose={() => setShowComments(false)}
+        />
+      )}
+      {showAI && (
+        <AIAssistantPanel isOpen={showAI} onClose={() => setShowAI(false)} />
+      )}
 
-      {/* Delete confirmation */}
       <Modal
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
